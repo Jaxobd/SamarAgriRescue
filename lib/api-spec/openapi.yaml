@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Samar AgriRescue marketplace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+  - name: products
+  - name: reservations
+  - name: messages
+  - name: profile
+  - name: admin
 paths:
   /healthz:
     get:
@@ -24,7 +30,443 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /stats:
+    get:
+      operationId: getStats
+      tags: [products]
+      summary: Public marketplace statistics
+      responses:
+        "200":
+          description: Marketplace statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the current signed-in user
+      responses:
+        "200":
+          description: Current user or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a farmer, fisherfolk member, or buyer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Validation error
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          description: Invalid credentials
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Sign out
+      responses:
+        "204":
+          description: Signed out
+  /products:
+    get:
+      operationId: getProducts
+      tags: [products]
+      summary: Browse marketplace products
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/Category"
+        - $ref: "#/components/parameters/Location"
+        - $ref: "#/components/parameters/Status"
+        - name: rescue
+          in: query
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, price_asc, price_desc]
+            default: newest
+      responses:
+        "200":
+          description: Product listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a surplus product listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "401": { description: Authentication required }
+        "403": { description: Producer account required }
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: View product details
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404": { description: Product not found }
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update an owned product listing
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "403": { description: Product ownership required }
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete an owned product listing
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Product ownership required }
+  /products/{id}/sold:
+    post:
+      operationId: markProductSold
+      tags: [products]
+      summary: Mark an owned product sold
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+  /reservations:
+    get:
+      operationId: getReservations
+      tags: [reservations]
+      summary: View reservations for the current user
+      responses:
+        "200":
+          description: Reservations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Reservation" }
+    post:
+      operationId: createReservation
+      tags: [reservations]
+      summary: Reserve an available product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationInput"
+      responses:
+        "201":
+          description: Reservation created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+        "400": { description: Quantity unavailable }
+  /reservations/{id}:
+    patch:
+      operationId: updateReservation
+      tags: [reservations]
+      summary: Update a reservation status
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationUpdate"
+      responses:
+        "200":
+          description: Updated reservation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reservation" }
+  /messages:
+    get:
+      operationId: getMessages
+      tags: [messages]
+      summary: View messages for the current user
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Message" }
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message to another user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+  /messages/{id}/read:
+    post:
+      operationId: markMessageRead
+      tags: [messages]
+      summary: Mark a message read
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Updated message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+  /profiles/{id}:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: View a public producer profile
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Producer profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+  /profile:
+    patch:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update the current profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Profile" }
+  /reports:
+    post:
+      operationId: createReport
+      tags: [admin]
+      summary: Report an inappropriate listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportInput"
+      responses:
+        "201":
+          description: Report created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Report" }
+  /admin/summary:
+    get:
+      operationId: getAdminSummary
+      tags: [admin]
+      summary: Administrator summary
+      responses:
+        "200":
+          description: Admin counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSummary" }
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: Search users as administrator
+      parameters:
+        - $ref: "#/components/parameters/Search"
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+  /admin/users/{id}:
+    patch:
+      operationId: updateAdminUser
+      tags: [admin]
+      summary: Enable or disable a user
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+  /admin/products:
+    get:
+      operationId: getAdminProducts
+      tags: [admin]
+      summary: View all product listings as administrator
+      parameters:
+        - $ref: "#/components/parameters/Search"
+      responses:
+        "200":
+          description: Product listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+  /admin/products/{id}:
+    delete:
+      operationId: adminDeleteProduct
+      tags: [admin]
+      summary: Remove a listing as administrator
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "204": { description: Removed }
+  /admin/reports:
+    get:
+      operationId: getAdminReports
+      tags: [admin]
+      summary: View reports as administrator
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Report" }
+  /admin/reports/{id}:
+    patch:
+      operationId: updateAdminReport
+      tags: [admin]
+      summary: Resolve a report
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportUpdate"
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Report" }
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    Search:
+      name: search
+      in: query
+      schema: { type: string }
+    Category:
+      name: category
+      in: query
+      schema: { type: string }
+    Location:
+      name: location
+      in: query
+      schema: { type: string }
+    Status:
+      name: status
+      in: query
+      schema: { type: string, enum: [Available, Reserved, Sold] }
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +475,195 @@ components:
           type: string
       required:
         - status
+    User:
+      type: object
+      required: [id, fullName, username, email, location, userType, isActive, createdAt]
+      properties:
+        id: { type: integer }
+        fullName: { type: string }
+        username: { type: string }
+        email: { type: string }
+        phone: { type: ["string", "null"] }
+        location: { type: ["string", "null"] }
+        userType: { type: string, enum: [Farmer, Fisherfolk, Buyer, Administrator] }
+        profileImage: { type: ["string", "null"] }
+        bio: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        createdAt: { type: string }
+    AuthSession:
+      type: object
+      required: [user]
+      properties:
+        user: { oneOf: [{ $ref: "#/components/schemas/User" }, { type: "null" }] }
+    RegisterInput:
+      type: object
+      required: [fullName, username, email, password, phone, location, userType]
+      properties:
+        fullName: { type: string, minLength: 2 }
+        username: { type: string, minLength: 3 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+        phone: { type: string, minLength: 7 }
+        location: { type: string, minLength: 2 }
+        userType: { type: string, enum: [Farmer, Fisherfolk, Buyer] }
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    Product:
+      type: object
+      required: [id, producerId, producerName, name, category, price, quantity, unit, location, status, isRescue, createdAt]
+      properties:
+        id: { type: integer }
+        producerId: { type: integer }
+        producerName: { type: string }
+        producerType: { type: string }
+        name: { type: string }
+        category: { type: string }
+        description: { type: ["string", "null"] }
+        price: { type: number }
+        quantity: { type: number }
+        unit: { type: string }
+        location: { type: string }
+        image: { type: ["string", "null"] }
+        availabilityDate: { type: ["string", "null"] }
+        status: { type: string, enum: [Available, Reserved, Sold] }
+        isRescue: { type: boolean }
+        createdAt: { type: string }
+    ProductInput:
+      type: object
+      required: [name, category, price, quantity, unit, location]
+      properties:
+        name: { type: string, minLength: 2 }
+        category: { type: string }
+        description: { type: string }
+        price: { type: number, minimum: 0 }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string }
+        location: { type: string }
+        image: { type: string }
+        availabilityDate: { type: string }
+        isRescue: { type: boolean }
+    ProductUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ProductInput"
+    Reservation:
+      type: object
+      required: [id, productId, productName, buyerId, buyerName, quantity, status, createdAt]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        productName: { type: string }
+        productImage: { type: ["string", "null"] }
+        producerName: { type: string }
+        buyerId: { type: integer }
+        buyerName: { type: string }
+        quantity: { type: number }
+        unit: { type: string }
+        status: { type: string, enum: [Pending, Confirmed, Cancelled, Completed] }
+        createdAt: { type: string }
+    ReservationInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: integer }
+        quantity: { type: number, exclusiveMinimum: 0 }
+    ReservationUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [Pending, Confirmed, Cancelled, Completed] }
+    Message:
+      type: object
+      required: [id, senderId, senderName, receiverId, receiverName, message, isRead, createdAt]
+      properties:
+        id: { type: integer }
+        senderId: { type: integer }
+        senderName: { type: string }
+        receiverId: { type: integer }
+        receiverName: { type: string }
+        productId: { type: ["integer", "null"] }
+        productName: { type: ["string", "null"] }
+        message: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string }
+    MessageInput:
+      type: object
+      required: [receiverId, message]
+      properties:
+        receiverId: { type: integer }
+        productId: { type: integer }
+        message: { type: string, minLength: 1 }
+    Profile:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [products]
+          properties:
+            products:
+              type: array
+              items: { $ref: "#/components/schemas/Product" }
+    ProfileUpdate:
+      type: object
+      properties:
+        fullName: { type: string, minLength: 2 }
+        phone: { type: string }
+        location: { type: string }
+        bio: { type: string }
+        profileImage: { type: string }
+    Report:
+      type: object
+      required: [id, reporterId, reporterName, productId, productName, reason, status, createdAt]
+      properties:
+        id: { type: integer }
+        reporterId: { type: integer }
+        reporterName: { type: string }
+        productId: { type: integer }
+        productName: { type: string }
+        reason: { type: string }
+        description: { type: ["string", "null"] }
+        status: { type: string, enum: [Open, Resolved] }
+        createdAt: { type: string }
+    ReportInput:
+      type: object
+      required: [productId, reason]
+      properties:
+        productId: { type: integer }
+        reason: { type: string }
+        description: { type: string }
+    ReportUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [Open, Resolved] }
+    Stats:
+      type: object
+      required: [availableProducts, registeredProducers, productsRescued, activeBuyers]
+      properties:
+        availableProducts: { type: integer }
+        registeredProducers: { type: integer }
+        productsRescued: { type: integer }
+        activeBuyers: { type: integer }
+    AdminSummary:
+      type: object
+      required: [totalUsers, farmers, fisherfolk, buyers, totalProducts, availableProducts, reservedProducts, soldProducts, rescueListings, totalReservations, openReports]
+      properties:
+        totalUsers: { type: integer }
+        farmers: { type: integer }
+        fisherfolk: { type: integer }
+        buyers: { type: integer }
+        totalProducts: { type: integer }
+        availableProducts: { type: integer }
+        reservedProducts: { type: integer }
+        soldProducts: { type: integer }
+        rescueListings: { type: integer }
+        totalReservations: { type: integer }
+        openReports: { type: integer }
+    AdminUserUpdate:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
 

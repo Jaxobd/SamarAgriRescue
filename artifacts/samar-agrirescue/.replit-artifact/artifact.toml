@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Samar AgriRescue"
+description = "A mobile-friendly marketplace that helps Samar farmers and fisherfolk sell surplus products to nearby buyers before they become waste."
+version = "1.0.0"
+id = "artifacts/samar-agrirescue"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26073
+
+[services.development]
+run = "pnpm --filter @workspace/samar-agrirescue run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/samar-agrirescue", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/samar-agrirescue/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26073"
+BASE_PATH = "/"
