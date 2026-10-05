@@ -1,4 +1,4 @@
-import { createHmac, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import {
   and,
   asc,
@@ -30,7 +30,7 @@ const numberValue = (value: string | number | null | undefined) =>
   value == null ? 0 : Number(value);
 
 export function hashPassword(password: string): string {
-  const salt = "samar-agrirescue";
+  const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 32).toString("hex")}`;
 }
 

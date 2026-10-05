@@ -115,6 +115,10 @@ paths:
         - name: rescue
           in: query
           schema: { type: boolean }
+        - name: includeUnavailable
+          in: query
+          description: Include reserved and sold products for producer management views.
+          schema: { type: boolean, default: false }
         - name: sort
           in: query
           schema:

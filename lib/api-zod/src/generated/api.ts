@@ -124,6 +124,7 @@ export const LogoutResponse = zod.void()
 /**
  * @summary Browse marketplace products
  */
+export const getProductsQueryIncludeUnavailableDefault = false;
 export const getProductsQuerySortDefault = `newest`;
 
 export const GetProductsQueryParams = zod.object({
@@ -132,6 +133,7 @@ export const GetProductsQueryParams = zod.object({
   "location": zod.coerce.string().optional(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']).optional(),
   "rescue": zod.coerce.boolean().optional(),
+  "includeUnavailable": zod.coerce.boolean().default(getProductsQueryIncludeUnavailableDefault).describe('Include reserved and sold products for producer management views.'),
   "sort": zod.enum(['newest', 'price_asc', 'price_desc']).default(getProductsQuerySortDefault)
 })
 

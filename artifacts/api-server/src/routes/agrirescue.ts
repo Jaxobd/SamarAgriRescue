@@ -151,7 +151,7 @@ router.get("/products", async (req, res): Promise<void> => {
   }
   const products = await listProducts({
     ...parsed.data,
-    availableOnly: !parsed.data.status || parsed.data.status === "Available",
+    availableOnly: !parsed.data.includeUnavailable && (!parsed.data.status || parsed.data.status === "Available"),
   });
   res.json(GetProductsResponse.parse(products));
 });
@@ -279,19 +279,19 @@ router.get("/reservations", async (req, res): Promise<void> => {
     .innerJoin(usersTable, eq(reservationsTable.buyerId, usersTable.id))
     .where(user.userType === "Buyer" ? eq(reservationsTable.buyerId, user.id) : eq(productsTable.producerId, user.id))
     .orderBy(desc(reservationsTable.createdAt));
-  const result = rows.map(({ reservation, product, buyer }) => ({
+  const result = await Promise.all(rows.map(async ({ reservation, product, buyer }) => ({
     id: reservation.id,
     productId: product.id,
     productName: product.name,
     productImage: product.image,
-    producerName: "producer",
+    producerName: (await producerFor(product.producerId))?.fullName ?? "producer",
     buyerId: buyer.id,
     buyerName: buyer.fullName,
     quantity: Number(reservation.quantity),
     unit: product.unit,
     status: reservation.status,
     createdAt: reservation.createdAt.toISOString(),
-  }));
+  })));
   res.json(GetReservationsResponse.parse(result));
 });
 
@@ -307,22 +307,31 @@ router.post("/reservations", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, parsed.data.productId));
-  if (!product || product.status !== "Available" || Number(product.quantity) < parsed.data.quantity) {
+  const result = await db.transaction(async (tx) => {
+    const [product] = await tx.select().from(productsTable)
+      .where(eq(productsTable.id, parsed.data.productId))
+      .for("update");
+    if (!product || product.status !== "Available" || Number(product.quantity) < parsed.data.quantity) {
+      return { unavailable: true as const };
+    }
+    const remaining = Number(product.quantity) - parsed.data.quantity;
+    const [reservation] = await tx.insert(reservationsTable).values({
+      productId: product.id,
+      buyerId: user.id,
+      quantity: String(parsed.data.quantity),
+    }).returning();
+    await tx.update(productsTable).set({
+      quantity: String(remaining),
+      status: remaining <= 0 ? "Reserved" : "Available",
+      updatedAt: new Date(),
+    }).where(eq(productsTable.id, product.id));
+    return { unavailable: false as const, product, reservation };
+  });
+  if (result.unavailable) {
     res.status(400).json({ error: "That quantity is no longer available." });
     return;
   }
-  const remaining = Number(product.quantity) - parsed.data.quantity;
-  const [reservation] = await db.insert(reservationsTable).values({
-    productId: product.id,
-    buyerId: user.id,
-    quantity: String(parsed.data.quantity),
-  }).returning();
-  await db.update(productsTable).set({
-    quantity: String(remaining),
-    status: remaining <= 0 ? "Reserved" : "Available",
-    updatedAt: new Date(),
-  }).where(eq(productsTable.id, product.id));
+  const { product, reservation } = result;
   res.status(201).json({
     id: reservation.id,
     productId: product.id,
@@ -347,30 +356,64 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.success ? "Invalid reservation id." : parsed.error.message });
     return;
   }
-  const [row] = await db.select({
-    reservation: reservationsTable,
-    product: productsTable,
-    buyer: usersTable,
-  }).from(reservationsTable).innerJoin(productsTable, eq(reservationsTable.productId, productsTable.id)).innerJoin(usersTable, eq(reservationsTable.buyerId, usersTable.id)).where(eq(reservationsTable.id, id));
-  if (!row) {
+  const result = await db.transaction(async (tx) => {
+    const [reservation] = await tx.select().from(reservationsTable)
+      .where(eq(reservationsTable.id, id))
+      .for("update");
+    if (!reservation) return { missing: true as const };
+
+    const [product] = await tx.select().from(productsTable)
+      .where(eq(productsTable.id, reservation.productId))
+      .for("update");
+    const [buyer] = await tx.select().from(usersTable).where(eq(usersTable.id, reservation.buyerId));
+    if (!product || !buyer) return { missing: true as const };
+    if (buyer.id !== user.id && product.producerId !== user.id && user.userType !== "Administrator") {
+      return { forbidden: true as const };
+    }
+    if (
+      (reservation.status === "Cancelled" && parsed.data.status !== "Cancelled") ||
+      (reservation.status === "Completed" && parsed.data.status === "Cancelled")
+    ) {
+      return { invalidTransition: true as const };
+    }
+
+    if (parsed.data.status === "Cancelled" && reservation.status !== "Cancelled" && product.status !== "Sold") {
+      const restoredQuantity = Number(product.quantity) + Number(reservation.quantity);
+      await tx.update(productsTable).set({
+        quantity: String(restoredQuantity),
+        status: "Available",
+        updatedAt: new Date(),
+      }).where(eq(productsTable.id, product.id));
+    }
+    const [updatedReservation] = await tx.update(reservationsTable)
+      .set({ status: parsed.data.status, updatedAt: new Date() })
+      .where(eq(reservationsTable.id, id))
+      .returning();
+    return { missing: false as const, reservation: updatedReservation, product, buyer };
+  });
+  if ("missing" in result && result.missing) {
     res.status(404).json({ error: "Reservation not found." });
     return;
   }
-  if (row.buyer.id !== user.id && row.product.producerId !== user.id && user.userType !== "Administrator") {
+  if ("forbidden" in result && result.forbidden) {
     res.status(403).json({ error: "You cannot update this reservation." });
     return;
   }
-  const [reservation] = await db.update(reservationsTable).set({ status: parsed.data.status, updatedAt: new Date() }).where(eq(reservationsTable.id, id)).returning();
+  if ("invalidTransition" in result && result.invalidTransition) {
+    res.status(400).json({ error: "A cancelled reservation cannot be reopened." });
+    return;
+  }
+  const { reservation, product, buyer } = result;
   res.json({
     id: reservation.id,
-    productId: row.product.id,
-    productName: row.product.name,
-    productImage: row.product.image,
-    producerName: (await producerFor(row.product.producerId))?.fullName ?? "producer",
-    buyerId: row.buyer.id,
-    buyerName: row.buyer.fullName,
+    productId: product.id,
+    productName: product.name,
+    productImage: product.image,
+    producerName: (await producerFor(product.producerId))?.fullName ?? "producer",
+    buyerId: buyer.id,
+    buyerName: buyer.fullName,
     quantity: Number(reservation.quantity),
-    unit: row.product.unit,
+    unit: product.unit,
     status: reservation.status,
     createdAt: reservation.createdAt.toISOString(),
   });

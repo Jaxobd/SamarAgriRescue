@@ -17,5 +17,9 @@ category?: CategoryParameter;
 location?: LocationParameter;
 status?: StatusParameter;
 rescue?: boolean;
+/**
+ * Include reserved and sold products for producer management views.
+ */
+includeUnavailable?: boolean;
 sort?: GetProductsSort;
 };
