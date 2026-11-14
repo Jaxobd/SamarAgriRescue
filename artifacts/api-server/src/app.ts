@@ -40,6 +40,7 @@ app.use(cors({
     /^http:\/\/localhost(:\d+)?$/,
     /^http:\/\/127\.0\.0\.1(:\d+)?$/,
     /\.loca\.lt$/,
+    /\.vercel\.app$/,
   ],
   credentials: true,
 }));
