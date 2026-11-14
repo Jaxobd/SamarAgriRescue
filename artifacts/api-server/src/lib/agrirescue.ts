@@ -12,7 +12,6 @@ import {
 import {
   activitiesTable,
   db,
-  activitiesTable,
   messagesTable,
   productsTable,
   reportsTable,

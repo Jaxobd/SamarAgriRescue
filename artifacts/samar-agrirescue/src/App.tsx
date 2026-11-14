@@ -2466,7 +2466,7 @@ function AdminProductModal({
               </select>
             </Field>
             <Field label="Status" required>
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select value={status} onChange={(e) => setStatus(e.target.value as "Available" | "Reserved" | "Sold")}>
                 <option value="Available">Available</option>
                 <option value="Reserved">Reserved</option>
                 <option value="Sold">Sold</option>
