@@ -1,0 +1,868 @@
+/* ==========================================================================
+   Samar AgriRescue: Dark Mode & Enhanced Components Styles
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Dark Mode Palette & Theme Overrides
+   -------------------------------------------------------------------------- */
+html.dark {
+  --ink: #e6ede8;
+  --ink-soft: #9db2a7;
+  --forest: #2a735a;
+  --leaf: #52b788;
+  --lime: #c2e28a;
+  --sun: #e9ba5e;
+  --cream: #0f1412;
+  --paper: #161e1a;
+  --line: #26352d;
+  --coral: #f0896d;
+  --blue: #1c2e27;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+html.dark body {
+  background: var(--cream);
+  color: var(--ink);
+}
+
+html.dark .site-header {
+  background: rgba(15, 20, 18, 0.92);
+  border-bottom-color: rgba(38, 53, 45, 0.85);
+}
+
+html.dark .main-nav {
+  color: #9cb2a7;
+}
+
+html.dark .main-nav a:hover,
+html.dark .main-nav a.active {
+  color: var(--lime);
+}
+
+html.dark .search-box,
+html.dark .marketplace-toolbar .search-box {
+  background: #1a241f;
+  color: #9db2a7;
+  border: 1px solid var(--line);
+}
+
+html.dark .marketplace-toolbar select,
+html.dark .dialog select,
+html.dark .field input,
+html.dark .field select,
+html.dark .field textarea,
+html.dark .dialog textarea {
+  background: #1a241f;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .product-card {
+  background: var(--paper);
+  border-color: var(--line);
+}
+
+html.dark .product-image {
+  background: #1a2520;
+}
+
+html.dark .image-fish,
+html.dark .image-seafood {
+  background: #182823;
+}
+
+html.dark .image-fruits {
+  background: #2a2217;
+}
+
+html.dark .image-rice---grains {
+  background: #27231a;
+}
+
+html.dark .image-arrow {
+  background: rgba(22, 30, 26, 0.92);
+  color: var(--lime);
+}
+
+html.dark .product-bottom {
+  border-top-color: var(--line);
+}
+
+html.dark .product-bottom strong {
+  color: var(--lime);
+}
+
+html.dark .stat {
+  background: var(--paper);
+}
+
+html.dark .stat strong {
+  color: var(--lime);
+}
+
+html.dark .step,
+html.dark .panel,
+html.dark .product-form,
+html.dark .profile-form,
+html.dark .dialog,
+html.dark .manage-product,
+html.dark .reservation-card,
+html.dark .message-card,
+html.dark .report-card,
+html.dark .admin-table,
+html.dark .site-footer {
+  background: var(--paper);
+  border-color: var(--line);
+}
+
+html.dark .mini-row {
+  border-top-color: var(--line);
+}
+
+html.dark .admin-row {
+  border-bottom-color: var(--line);
+}
+
+html.dark .admin-sidebar nav a.active,
+html.dark .admin-sidebar nav a:hover {
+  background: #1c2b23;
+  color: var(--lime);
+}
+
+html.dark .button-outline {
+  color: var(--lime);
+  border-color: var(--line);
+}
+
+html.dark .button-outline:hover {
+  background: #1c2922;
+  border-color: var(--leaf);
+}
+
+html.dark .button-primary {
+  background: #277057;
+  color: white;
+}
+
+html.dark .button-primary:hover {
+  background: #1e5945;
+}
+
+html.dark .icon-action {
+  background: var(--paper);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+html.dark .icon-action:hover {
+  background: #222f28;
+}
+
+html.dark .metric-green {
+  background: #172a20;
+  border: 1px solid #224231;
+}
+
+html.dark .metric-green .metric-icon {
+  background: #1f3b2d;
+  color: #79d79c;
+}
+
+html.dark .metric-yellow {
+  background: #2b2413;
+  border: 1px solid #45371c;
+}
+
+html.dark .metric-yellow .metric-icon {
+  background: #3e3118;
+  color: #f7ce74;
+}
+
+html.dark .metric-blue {
+  background: #16292b;
+  border: 1px solid #204044;
+}
+
+html.dark .metric-blue .metric-icon {
+  background: #1e393c;
+  color: #73c8d3;
+}
+
+html.dark .status-available {
+  background: #1a3625;
+  color: #82e2a0;
+}
+
+html.dark .status-reserved,
+html.dark .status-pending {
+  background: #3d3012;
+  color: #f5cf6d;
+}
+
+html.dark .status-sold,
+html.dark .status-cancelled {
+  background: #3b1e1b;
+  color: #fca597;
+}
+
+html.dark .status-confirmed,
+html.dark .status-completed {
+  background: #173236;
+  color: #72cfdb;
+}
+
+/* --------------------------------------------------------------------------
+   Theme Toggle Button
+   -------------------------------------------------------------------------- */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s, border-color 0.2s;
+  flex: none;
+}
+
+.theme-toggle-btn:hover {
+  transform: rotate(18deg) scale(1.05);
+  background: #eef3ea;
+  border-color: var(--leaf);
+}
+
+html.dark .theme-toggle-btn:hover {
+  background: #223027;
+}
+
+/* --------------------------------------------------------------------------
+   Password Visibility Toggle Input
+   -------------------------------------------------------------------------- */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 42px !important;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.password-toggle-btn:hover {
+  color: var(--forest);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .password-toggle-btn:hover {
+  color: var(--lime);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.password-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.password-check-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+
+.password-check-item.valid {
+  color: var(--leaf);
+  font-weight: 600;
+}
+
+.password-check-item.invalid {
+  color: #c96d51;
+}
+
+/* --------------------------------------------------------------------------
+   Google Sign-In Button & Auth Separators
+   -------------------------------------------------------------------------- */
+.google-auth-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s, border-color 0.2s;
+  text-decoration: none;
+}
+
+.google-btn:hover {
+  transform: translateY(-1px);
+  background: #f4f6ee;
+  border-color: #ccd9ce;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+html.dark .google-btn:hover {
+  background: #1f2a24;
+  border-color: #374b3f;
+}
+
+.google-icon-svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 12px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.google-config-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fbf7ea;
+  border: 1px solid #ebd8a0;
+  color: #8c6717;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+html.dark .google-config-notice {
+  background: #292414;
+  border-color: #4b3d1b;
+  color: #ecc468;
+}
+
+/* --------------------------------------------------------------------------
+   Product Image Upload & Previews
+   -------------------------------------------------------------------------- */
+.image-upload-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-upload-dropzone {
+  border: 2px dashed var(--line);
+  border-radius: 14px;
+  padding: 24px;
+  text-align: center;
+  background: #fafbf8;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+html.dark .image-upload-dropzone {
+  background: #17211c;
+}
+
+.image-upload-dropzone:hover,
+.image-upload-dropzone.dragging {
+  border-color: var(--leaf);
+  background: #f1f7ec;
+}
+
+html.dark .image-upload-dropzone:hover,
+html.dark .image-upload-dropzone.dragging {
+  background: #1b2b23;
+}
+
+.image-upload-dropzone input[type="file"] {
+  display: none;
+}
+
+.image-upload-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #e4efdf;
+  color: var(--leaf);
+  display: grid;
+  place-items: center;
+}
+
+html.dark .image-upload-icon {
+  background: #203529;
+  color: var(--lime);
+}
+
+.image-preview-card {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  aspect-ratio: 16/9;
+  max-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 60%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.image-preview-badge {
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.image-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Direct Database Management / Database Viewer (Requirement 6)
+   -------------------------------------------------------------------------- */
+.db-viewer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.security-badge-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #edf7e9;
+  border: 1px solid #cce5c4;
+  color: var(--forest);
+  font-size: 12px;
+}
+
+html.dark .security-badge-banner {
+  background: #17291f;
+  border-color: #264734;
+  color: #8ce1ab;
+}
+
+.security-badge-banner svg {
+  flex: none;
+}
+
+.db-tables-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+.db-table-pill {
+  padding: 9px 15px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.db-table-pill:hover {
+  border-color: var(--leaf);
+  color: var(--forest);
+  background: #f3f7ef;
+}
+
+html.dark .db-table-pill:hover {
+  background: #1d2a23;
+  color: var(--lime);
+}
+
+.db-table-pill.active {
+  background: var(--forest);
+  color: white;
+  border-color: var(--forest);
+}
+
+.db-pill-count {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.db-table-pill.active .db-pill-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.db-viewer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.db-table-scroll {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.db-raw-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+
+.db-raw-table th {
+  background: #f1f6ed;
+  color: var(--forest);
+  font-weight: 700;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+html.dark .db-raw-table th {
+  background: #1b2620;
+  color: var(--lime);
+}
+
+.db-raw-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.db-raw-table tr:hover td {
+  background: rgba(47, 129, 85, 0.04);
+}
+
+html.dark .db-raw-table tr:hover td {
+  background: rgba(82, 183, 136, 0.06);
+}
+
+.db-redacted-val {
+  color: #c96d51;
+  font-family: monospace;
+  font-size: 10px;
+  font-style: italic;
+  background: rgba(237, 129, 99, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.db-date-val {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.db-id-val {
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--leaf);
+}
+
+.db-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  flex-wrap: wrap;
+}
+
+.db-pagination-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Record Detail Inspector */
+.record-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.record-fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-field-item {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fafbf8;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  align-items: center;
+}
+
+html.dark .record-field-item {
+  background: #18221c;
+}
+
+.record-field-name {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.record-field-content {
+  word-break: break-all;
+  font-family: inherit;
+}
+
+.record-json-block {
+  background: #121815;
+  color: #79d79c;
+  padding: 16px;
+  border-radius: 10px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  border: 1px solid #233529;
+}
+
+/* --------------------------------------------------------------------------
+   Audit Logs / System Activity
+   -------------------------------------------------------------------------- */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.activity-icon-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.activity-badge-auth {
+  background: #e2edd6;
+  color: #38703a;
+}
+
+.activity-badge-product {
+  background: #f7e8c9;
+  color: #9c6d1a;
+}
+
+.activity-badge-admin {
+  background: #f5e0dc;
+  color: #ad5948;
+}
+
+.activity-badge-upload,
+.activity-badge-reservation {
+  background: #dcebe6;
+  color: #357467;
+}
+
+html.dark .activity-badge-auth {
+  background: #1a3324;
+  color: #7ce49d;
+}
+
+html.dark .activity-badge-product {
+  background: #382c14;
+  color: #f7cb67;
+}
+
+html.dark .activity-badge-admin {
+  background: #3b1f1a;
+  color: #fca797;
+}
+
+html.dark .activity-badge-upload,
+html.dark .activity-badge-reservation {
+  background: #162f33;
+  color: #6ed0dc;
+}
+
+.activity-content {
+  flex: 1;
+}
+
+.activity-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.activity-title-row strong {
+  font-size: 13px;
+}
+
+.activity-title-row small {
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+
+.activity-details {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Confirmation Modal & Alert Overlays
+   -------------------------------------------------------------------------- */
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.confirm-dialog-copy {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.button-danger {
+  background: #c9513e;
+  color: white;
+}
+
+.button-danger:hover {
+  background: #b04332;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .db-viewer-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .db-pagination-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .record-field-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

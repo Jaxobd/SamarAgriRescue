@@ -1,15 +1,23 @@
+import fs from "node:fs";
+import path from "node:path";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedDemoData } from "./lib/agrirescue";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
+// Automatically load .env file if available
+for (const envFile of [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "artifacts/api-server/.env"),
+]) {
+  if (fs.existsSync(envFile) && typeof process.loadEnvFile === "function") {
+    try {
+      process.loadEnvFile(envFile);
+      break;
+    } catch {}
+  }
 }
 
+const rawPort = process.env["PORT"] || "5000";
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {

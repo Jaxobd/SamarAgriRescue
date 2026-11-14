@@ -10,6 +10,7 @@ import {
   sql,
 } from "drizzle-orm";
 import {
+  activitiesTable,
   db,
   messagesTable,
   productsTable,
@@ -77,9 +78,152 @@ export function toUser(user: User) {
     userType: user.userType,
     profileImage: user.profileImage,
     bio: user.bio,
+    googleId: user.googleId ?? null,
     isActive: user.isActive,
     createdAt: iso(user.createdAt),
   };
+}
+
+export async function logActivity(options: {
+  userId?: number | null;
+  type: string;
+  action: string;
+  details?: string;
+  entityId?: number;
+  entityType?: string;
+}) {
+  try {
+    await db.insert(activitiesTable).values({
+      userId: options.userId ?? null,
+      type: options.type,
+      action: options.action,
+      details: options.details ?? null,
+      entityId: options.entityId ?? null,
+      entityType: options.entityType ?? null,
+    });
+  } catch (err) {
+    console.error("Activity logging error:", err);
+  }
+}
+
+export function getGoogleOAuthConfig() {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim() ?? "";
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() ?? "";
+  return {
+    enabled: Boolean(clientId && clientSecret),
+    clientId: clientId || null,
+  };
+}
+
+export async function verifyGoogleIdToken(idToken: string) {
+  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Invalid Google ID token: ${text}`);
+  }
+  const payload = (await res.json()) as any;
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (clientId && payload.aud !== clientId) {
+    throw new Error("Google token audience mismatch");
+  }
+  return {
+    googleId: payload.sub as string,
+    email: (payload.email as string).toLowerCase(),
+    fullName: (payload.name as string) || (payload.email as string).split("@")[0],
+    profileImage: (payload.picture as string) || null,
+    emailVerified: payload.email_verified === "true" || payload.email_verified === true,
+  };
+}
+
+export async function exchangeGoogleCode(code: string, redirectUri: string) {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    throw new Error("Google OAuth credentials are not configured on the server.");
+  }
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+  if (!tokenRes.ok) {
+    const errText = await tokenRes.text();
+    throw new Error(`Google token exchange failed: ${errText}`);
+  }
+  const tokens = (await tokenRes.json()) as any;
+  if (!tokens.id_token) {
+    throw new Error("Google authentication response did not contain an id_token.");
+  }
+  return verifyGoogleIdToken(tokens.id_token);
+}
+
+export async function findOrCreateGoogleUser(profile: {
+  googleId: string;
+  email: string;
+  fullName: string;
+  profileImage: string | null;
+  userType?: string;
+}): Promise<User> {
+  const email = profile.email.toLowerCase();
+
+  // 1. Try finding by googleId
+  const [byGoogle] = await db.select().from(usersTable).where(eq(usersTable.googleId, profile.googleId));
+  if (byGoogle) {
+    if (!byGoogle.isActive) {
+      throw new Error("This account has been deactivated. Please contact an administrator.");
+    }
+    if (!byGoogle.profileImage && profile.profileImage) {
+      await db.update(usersTable).set({ profileImage: profile.profileImage }).where(eq(usersTable.id, byGoogle.id));
+      byGoogle.profileImage = profile.profileImage;
+    }
+    return byGoogle;
+  }
+
+  // 2. Try finding by email (prevent duplicate accounts for the same email)
+  const [byEmail] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (byEmail) {
+    if (!byEmail.isActive) {
+      throw new Error("This account has been deactivated. Please contact an administrator.");
+    }
+    const [updated] = await db.update(usersTable).set({
+      googleId: profile.googleId,
+      profileImage: byEmail.profileImage || profile.profileImage,
+    }).where(eq(usersTable.id, byEmail.id)).returning();
+    return updated;
+  }
+
+  // 3. Register new account with Google credentials
+  const baseUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").slice(0, 50) || "user";
+  let username = baseUsername;
+  let suffix = 1;
+  while (true) {
+    const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, username)).limit(1);
+    if (!existing.length) break;
+    username = `${baseUsername}${suffix++}`;
+  }
+
+  const unguessablePassword = randomBytes(32).toString("hex");
+  const [newUser] = await db.insert(usersTable).values({
+    fullName: profile.fullName || username,
+    username,
+    email,
+    passwordHash: hashPassword(unguessablePassword),
+    userType: profile.userType || "Buyer",
+    profileImage: profile.profileImage,
+    googleId: profile.googleId,
+    location: "Samar, Philippines",
+    bio: "Joined via Google Sign-In.",
+    isActive: true,
+  }).returning();
+
+  return newUser;
 }
 
 export function toProduct(product: Product, producer?: User) {
@@ -133,8 +277,8 @@ export async function listProducts(options: {
 
   const search = options.search?.trim().toLowerCase();
   return rows
-    .map(({ product, producer }) => toProduct(product, producer))
-    .filter((product) => !search || `${product.name} ${product.description ?? ""} ${product.producerName} ${product.location}`.toLowerCase().includes(search));
+    .map(({ product, producer }: any) => toProduct(product, producer))
+    .filter((product: any) => !search || `${product.name} ${product.description ?? ""} ${product.producerName} ${product.location}`.toLowerCase().includes(search));
 }
 
 export async function seedDemoData() {
@@ -261,6 +405,13 @@ export async function seedDemoData() {
       isRescue: false,
     },
   ]);
+
+  await logActivity({
+    userId: admin.id,
+    type: "system",
+    action: "Platform initialized",
+    details: "Marketplace seeded with demo producers, buyers, and surplus food listings.",
+  });
 }
 
 export async function producerFor(id: number) {

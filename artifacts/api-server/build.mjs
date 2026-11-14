@@ -3,7 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, cp, readdir } from "node:fs/promises";
+import { createRequire as cjsReq } from "node:module";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -14,6 +15,10 @@ async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
 
+  // Copy PGlite WASM assets so the bundled server can find them at runtime.
+  // PGlite resolves pglite.data/pglite.wasm relative to import.meta.url (the bundle),
+  // so we copy them from node_modules into dist/ before building.
+  const pgliteDistDir = path.resolve(artifactDir, "node_modules/@electric-sql/pglite/dist");
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
     platform: "node",
@@ -118,6 +123,20 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Copy ALL PGlite WASM/data assets into dist/ so they're found at runtime.
+  // PGlite resolves all assets relative to import.meta.url (the bundle = dist/index.mjs).
+  const { readdir } = await import("node:fs/promises");
+  const pgliteFiles = await readdir(pgliteDistDir);
+  for (const file of pgliteFiles) {
+    // Copy .data, .wasm, .js, .cjs, .tar.gz files (not directories)
+    if (/\.(wasm|data|tar\.gz|js|cjs)$/.test(file)) {
+      const src = path.join(pgliteDistDir, file);
+      const dest = path.join(distDir, file);
+      await cp(src, dest).catch(() => { });
+    }
+  }
+  console.log(`Copied PGlite dist assets to dist/ (${pgliteFiles.length} entries scanned)`);
 }
 
 buildAll().catch((err) => {

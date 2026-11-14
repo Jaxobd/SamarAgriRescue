@@ -23,6 +23,7 @@ export const usersTable = pgTable("agri_users", {
   userType: varchar("user_type", { length: 30 }).notNull(),
   profileImage: text("profile_image"),
   bio: text("bio"),
+  googleId: varchar("google_id", { length: 128 }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -75,6 +76,17 @@ export const reportsTable = pgTable("agri_reports", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const activitiesTable = pgTable("agri_activities", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id),
+  type: varchar("type", { length: 50 }).notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  details: text("details"),
+  entityId: integer("entity_id"),
+  entityType: varchar("entity_type", { length: 50 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({
   id: true,
   createdAt: true,
@@ -97,14 +109,20 @@ export const insertReportSchema = createInsertSchema(reportsTable).omit({
   id: true,
   createdAt: true,
 });
+export const insertActivitySchema = createInsertSchema(activitiesTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type User = typeof usersTable.$inferSelect;
 export type Product = typeof productsTable.$inferSelect;
 export type Reservation = typeof reservationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type Report = typeof reportsTable.$inferSelect;
+export type Activity = typeof activitiesTable.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type InsertReservation = z.infer<typeof insertReservationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertReport = z.infer<typeof insertReportSchema>;
+export type InsertActivity = z.infer<typeof insertActivitySchema>;
