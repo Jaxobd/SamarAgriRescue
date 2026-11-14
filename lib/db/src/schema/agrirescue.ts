@@ -80,7 +80,7 @@ export const activitiesTable = pgTable("agri_activities", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id),
   type: varchar("type", { length: 50 }).notNull(),
-  action: varchar("action", { length: 100 }).notNull(),
+  action: varchar("action", { length: 255 }).notNull(),
   details: text("details"),
   entityId: integer("entity_id"),
   entityType: varchar("entity_type", { length: 50 }),

@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: samar_agrirescue_db
+    restart: always
+    environment:
+      POSTGRES_USER: samar_user
+      POSTGRES_PASSWORD: samar_secure_password
+      POSTGRES_DB: samar_agrirescue
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/agrirescue_publish_dump.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U samar_user -d samar_agrirescue"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local

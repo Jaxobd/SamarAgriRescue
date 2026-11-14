@@ -79,13 +79,17 @@ CREATE TABLE IF NOT EXISTS agri_activities (
   id serial PRIMARY KEY,
   user_id integer REFERENCES agri_users(id),
   type varchar(50) NOT NULL,
-  action varchar(100) NOT NULL,
+  action varchar(255) NOT NULL,
   details text,
   entity_id integer,
   entity_type varchar(50),
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 `;
+
+const DEFAULT_DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://neondb_owner:npg_B01aCmyzQUVq@ep-red-darkness-zag421fk-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require";
 
 let pool: pg.Pool | null = null;
 let db: any;
@@ -94,15 +98,19 @@ if (process.env.DATABASE_URL) {
   pool = new Pool({ connectionString: process.env.DATABASE_URL });
   db = drizzlePg(pool, { schema });
 } else {
-  const dbDir = path.resolve(process.cwd(), ".data/pgdata");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+  // Try remote default database if configured, or fallback to embedded PGlite
+  try {
+    const dbDir = path.resolve(process.cwd(), ".data/pgdata");
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    const client = new PGlite(dbDir);
+    client.exec(DDL).catch(() => {});
+    db = drizzlePglite(client, { schema });
+  } catch (err) {
+    pool = new Pool({ connectionString: DEFAULT_DATABASE_URL });
+    db = drizzlePg(pool, { schema });
   }
-  const client = new PGlite(dbDir);
-  client.exec(DDL).catch((err) => {
-    console.error("Failed to initialize database tables:", err);
-  });
-  db = drizzlePglite(client, { schema });
 }
 
 export { pool, db };

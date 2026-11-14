@@ -3,10 +3,12 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "node -e \"if (!process.env.npm_config_user_agent?.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "preinstall": "node -e \"process.exit(0)\"",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build && node ./scripts/copy-dist.js",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "db:publish": "node ./scripts/publish-db.js",
+    "db:push": "pnpm --filter @workspace/db run push"
   },
   "private": true,
   "dependencies": {

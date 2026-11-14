@@ -31,13 +31,26 @@ app.use(
 
 app.use(
   cors({
-    origin: true,
+    origin: [
+      "https://SamarAgriRescue.com",
+      "https://www.SamarAgriRescue.com",
+      "https://samaragrirescue.com",
+      "https://www.samaragrirescue.com",
+      "http://SamarAgriRescue.com",
+      "http://www.SamarAgriRescue.com",
+      "http://samaragrirescue.com",
+      "http://www.samaragrirescue.com",
+      /^http:\/\/localhost(:\d+)?$/,
+      /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+      /\.loca\.lt$/,
+      /\.vercel\.app$/,
+    ],
     credentials: true,
   }),
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
 // Serve uploaded product images securely
 app.use(
@@ -54,13 +67,18 @@ app.use(
 // Mount API routes
 app.use("/api", router);
 
-// Serve frontend static build if available (production mode / standalone)
-const frontendDist = path.resolve(process.cwd(), "artifacts/samar-agrirescue/dist/public");
-if (fs.existsSync(frontendDist)) {
+// Serve frontend static client assets when built (SPA fallback for Express 5)
+const candidatePaths = [
+  path.resolve(process.cwd(), "artifacts/samar-agrirescue/dist/public"),
+  path.resolve(process.cwd(), "public"),
+];
+const frontendDist = candidatePaths.find((p) => fs.existsSync(p));
+
+if (frontendDist) {
   app.use(express.static(frontendDist));
   app.use((req, res, next) => {
     if (req.method === "GET" && !req.path.startsWith("/api")) {
-      return res.sendFile(path.join(frontendDist, "index.html"));
+      return res.sendFile("index.html", { root: frontendDist });
     }
     next();
   });

@@ -48,8 +48,10 @@ Thumbs.db
 .cache/
 .local/
 
-# Environment and local databases / uploads
+# Environment variables & local data
 .env
 .env.local
+.env.*.local
+.env.production
 .data/
 uploads/
