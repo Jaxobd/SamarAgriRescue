@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { QueryClient, QueryClientProvider, useMutation, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getGetAdminProductsQueryKey,
   getGetAdminReportsQueryKey,
@@ -51,18 +51,25 @@ import {
   ArrowRight,
   Bell,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   CircleAlert,
   CircleUserRound,
   Clock3,
+  Eye,
+  EyeOff,
+  Filter,
   Fish,
   HeartHandshake,
+  History,
   Home,
+  Image as ImageIcon,
   Leaf,
   LogOut,
   Menu,
   MessageCircle,
+  Moon,
   Package,
   Pencil,
   Plus,
@@ -71,8 +78,10 @@ import {
   ShoppingBasket,
   Sprout,
   Store,
+  Sun,
   Trash2,
   TrendingUp,
+  Upload,
   UserRound,
   Users,
   X,
@@ -81,6 +90,189 @@ import { Link, Route, Switch, useLocation } from "wouter";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("samar_theme");
+      if (saved === "dark" || saved === "light") return saved;
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    }
+    return "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("samar_theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+
+  return { theme, toggleTheme };
+}
+
+function PasswordInput({
+  name,
+  required,
+  placeholder,
+  autoComplete,
+  minLength,
+  onChange,
+}: {
+  name: string;
+  required?: boolean;
+  placeholder?: string;
+  autoComplete?: string;
+  minLength?: number;
+  onChange?: () => void;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="password-input-wrap">
+      <input
+        type={show ? "text" : "password"}
+        name={name}
+        required={required}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        onChange={onChange}
+      />
+      <button
+        type="button"
+        className="password-toggle-btn"
+        onClick={() => setShow(!show)}
+        aria-label={show ? "Hide password" : "Show password"}
+        title={show ? "Hide password" : "Show password"}
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  );
+}
+
+const presetImages = [
+  { label: "Fresh Tomatoes", url: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80" },
+  { label: "Samar Rice", url: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80" },
+  { label: "Saba Bananas", url: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80" },
+  { label: "Fresh Tilapia", url: "https://images.unsplash.com/photo-1534043464124-3be32fe000c9?w=600&auto=format&fit=crop&q=80" },
+  { label: "Blue Crabs", url: "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?w=600&auto=format&fit=crop&q=80" },
+  { label: "Leafy Pechay", url: "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80" },
+  { label: "Eggplants", url: "https://images.unsplash.com/photo-1615484477778-ca3b77940c25?w=600&auto=format&fit=crop&q=80" },
+  { label: "Ripe Mangoes", url: "https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&auto=format&fit=crop&q=80" },
+];
+
+function ProductImagePicker({
+  value,
+  onChange,
+}: {
+  value?: string | null;
+  onChange: (url: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Please select a valid image file.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      alert("Image size should be less than 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (typeof e.target?.result === "string") {
+        onChange(e.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="image-upload-wrap">
+      {value ? (
+        <div className="image-preview-card">
+          <img src={value} alt="Product preview" />
+          <div className="image-preview-actions">
+            <button
+              type="button"
+              className="button button-small button-light"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={14} /> Change photo
+            </button>
+            <button
+              type="button"
+              className="button button-small button-outline danger"
+              onClick={() => onChange("")}
+            >
+              <Trash2 size={14} /> Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="image-dropzone"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
+          }}
+        >
+          <div className="image-dropzone-icon">
+            <Upload size={22} />
+          </div>
+          <strong>Click to upload product image</strong>
+          <small>or drag and drop photo from device (JPG, PNG, WebP up to 8MB)</small>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          if (e.target.files?.[0]) handleFile(e.target.files[0]);
+        }}
+      />
+
+      <div className="preset-section">
+        <div className="preset-heading">
+          <ImageIcon size={13} /> Or pick a Samar produce photo:
+        </div>
+        <div className="preset-grid">
+          {presetImages.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              className={`preset-item ${value === p.url ? "active" : ""}`}
+              onClick={() => onChange(p.url)}
+            >
+              <img src={p.url} alt={p.label} className="preset-thumb" />
+              <span>{p.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Field label="Or paste external photo URL">
+        <input
+          value={value && !value.startsWith("data:") ? value : ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://images.example.com/produce.jpg"
+        />
+      </Field>
+    </div>
+  );
+}
 
 const categories = ["All categories", "Vegetables", "Fruits", "Rice & Grains", "Fish", "Seafood", "Livestock", "Other"];
 const locations = ["All Samar", "Calbayog City", "Catbalogan City", "Basey", "Guiuan", "Borongan City"];
@@ -103,6 +295,7 @@ function App() {
 }
 
 function Shell() {
+  const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
   const { data: session, isLoading } = useGetCurrentUser();
   const user = session?.user;
@@ -110,8 +303,8 @@ function Shell() {
 
   if (isLoading && !publicPage) return <div className="loading-screen"><Sprout size={28} /><span>Loading Samar AgriRescue…</span></div>;
   return (
-    <div className="app-shell">
-      <Header user={user} />
+    <div className={`app-shell ${theme === "dark" ? "dark" : ""}`} data-theme={theme}>
+      <Header user={user} theme={theme} toggleTheme={toggleTheme} />
       <main className="page-wrap">
         <Switch>
           <Route path="/" component={() => <HomePage user={user} />} />
@@ -124,6 +317,7 @@ function Shell() {
           <Route path="/login" component={() => <LoginPage />} />
           <Route path="/register" component={() => <RegisterPage />} />
           <Route path="/dashboard" component={() => <DashboardPage user={user} />} />
+          <Route path="/activity" component={() => <ActivityHistoryPage user={user} />} />
           <Route path="/my-products" component={() => <MyProductsPage user={user} />} />
           <Route path="/reservations" component={() => <ReservationsPage user={user} />} />
           <Route path="/messages" component={() => <MessagesPage user={user} />} />
@@ -141,7 +335,7 @@ function Shell() {
   );
 }
 
-function Header({ user }: { user?: User | null }) {
+function Header({ user, theme, toggleTheme }: { user?: User | null; theme: "light" | "dark"; toggleTheme: () => void }) {
   const [open, setOpen] = useState(false);
   const [, navigate] = useLocation();
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,7 +370,17 @@ function Header({ user }: { user?: User | null }) {
           }}
           aria-label="Samar AgriRescue home. Press and hold to open admin access."
         ><span className="brand-mark"><Sprout size={21} /></span><span><strong>Samar</strong><em>AgriRescue</em></span></Link>
-        <button className="mobile-menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? <X /> : <Menu />}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            className="theme-toggle-btn mobile-theme-btn"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+          <button className="mobile-menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? <X /> : <Menu />}</button>
+        </div>
         <nav className={`main-nav ${open ? "nav-open" : ""}`}>
           <Link href="/" onClick={() => setOpen(false)}>Home</Link>
           <Link href="/products" onClick={() => setOpen(false)}>Browse</Link>
@@ -185,12 +389,32 @@ function Header({ user }: { user?: User | null }) {
           {user ? (
             <>
               <Link href="/dashboard" onClick={() => setOpen(false)}>Dashboard</Link>
+              <Link href="/activity" onClick={() => setOpen(false)} className="nav-icon-link"><History size={16} /> Activity</Link>
               <Link href="/messages" onClick={() => setOpen(false)} className="nav-icon-link"><MessageCircle size={16} /> Messages</Link>
+              <button
+                className="theme-toggle-btn desktop-theme-btn"
+                onClick={toggleTheme}
+                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              >
+                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
               <button className="header-profile" onClick={() => navigate(user.userType === "Administrator" ? "/admin" : "/profile")}><span className="avatar">{initials(user.fullName)}</span>{user.fullName.split(" ")[0]}<ChevronDown size={14} /></button>
               <button className="logout-btn" onClick={() => logout.mutate()} aria-label="Log out"><LogOut size={16} /></button>
             </>
           ) : (
-            <div className="auth-links"><Link href="/login">Log in</Link><Link href="/register" className="button button-small">Join the network <ArrowRight size={15} /></Link></div>
+            <div className="auth-links">
+              <button
+                className="theme-toggle-btn desktop-theme-btn"
+                onClick={toggleTheme}
+                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              >
+                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
+              <Link href="/login" onClick={() => setOpen(false)}>Log in</Link>
+              <Link href="/register" onClick={() => setOpen(false)} className="button button-small">Join the network <ArrowRight size={15} /></Link>
+            </div>
           )}
         </nav>
       </div>
@@ -199,7 +423,24 @@ function Header({ user }: { user?: User | null }) {
 }
 
 function Footer() {
-  return <footer className="site-footer"><div className="footer-inner"><div><div className="brand footer-brand"><span className="brand-mark"><Sprout size={19} /></span><span><strong>Samar</strong><em>AgriRescue</em></span></div><p>Rescue the harvest. Support local. Reduce waste.</p></div><div className="footer-note"><span><ShieldCheck size={15} /> Local exchange, community powered</span><small>Buyers and sellers arrange payment and pickup directly.</small></div></div></footer>;
+  return (
+    <footer className="site-footer">
+      <div className="footer-inner">
+        <div>
+          <div className="brand footer-brand">
+            <span className="brand-mark"><Sprout size={19} /></span>
+            <span><strong>Samar</strong><em>AgriRescue</em></span>
+          </div>
+          <p>Rescue the harvest. Support local producers. Reduce agricultural waste.</p>
+          <small className="text-muted-foreground block mt-1">Official Portal: <a href="https://SamarAgriRescue.com" className="font-semibold underline hover:text-primary">SamarAgriRescue.com</a></small>
+        </div>
+        <div className="footer-note">
+          <span><ShieldCheck size={15} /> Samar Provincial Producer Network</span>
+          <small>Connecting verified farmers, fisherfolk & buyers across Eastern Visayas.</small>
+        </div>
+      </div>
+    </footer>
+  );
 }
 
 function HomePage({ user }: { user?: User | null }) {
@@ -267,7 +508,7 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
   if (isLoading) return <LoadingState />;
   if (!product) return <NotFoundPage />;
   const isOwner = user?.id === product.producerId;
-  return <div className="detail-page"><Link href="/products" className="back-link"><ChevronLeft size={16} /> Back to browse</Link><div className="detail-layout"><div className="detail-visual"><div className="detail-image"><ProductIllustration category={product.category} />{product.isRescue && <span className="rescue-badge"><CircleAlert size={13} /> Rescue listing</span>}</div><div className="image-caption"><span><Clock3 size={14} /> Posted {relativeDate(product.createdAt)}</span><span>Demo listing</span></div></div><div className="detail-copy"><div className="product-topline"><span>{product.category}</span><span className={`status status-${product.status.toLowerCase()}`}>{product.status}</span></div><h1>{product.name}</h1><p className="detail-description">{product.description || "A local listing from a Samar producer."}</p><div className="detail-price">₱{product.price.toLocaleString()} <small>per {product.unit}</small></div><div className="detail-facts"><div><span>Available</span><strong>{product.quantity} {product.unit}</strong></div><div><span>Location</span><strong>{product.location}</strong></div><div><span>Ready from</span><strong>{product.availabilityDate || "Today"}</strong></div></div><div className="producer-box"><span className="avatar avatar-large">{initials(product.producerName)}</span><div><span>Listed by</span><Link href={`/profile/${product.producerId}`}>{product.producerName}</Link><small>{product.producerType || "Local producer"}</small></div><Link href={`/profile/${product.producerId}`} className="icon-circle"><ArrowRight size={16} /></Link></div>{isOwner ? <div className="detail-actions"><Link href={`/products/${id}/edit`} className="button button-primary"><Pencil size={16} /> Edit listing</Link><button className="button button-outline" onClick={() => setMessageOpen(true)}>View interest</button></div> : user?.userType === "Buyer" ? <div className="detail-actions"><div className="quantity-input"><button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button><strong>{quantity}</strong><button onClick={() => setQuantity(Math.min(product.quantity, quantity + 1))}>+</button><span>{product.unit}</span></div><button disabled={product.status !== "Available" || reserve.isPending} className="button button-primary button-grow" onClick={() => reserve.mutate({ data: { productId: id, quantity } })}>{reserve.isSuccess ? <><Check size={17} /> Reserved</> : <>Reserve product <ArrowRight size={17} /></>}</button><button className="button button-outline icon-button" onClick={() => setMessageOpen(true)}><MessageCircle size={17} /></button></div> : <div className="detail-actions"><Link href="/login" className="button button-primary button-grow">Log in to reserve <ArrowRight size={17} /></Link></div>}{reserve.isError && <p className="form-error">{errorMessage(reserve.error)}</p>}<div className="detail-links"><button onClick={() => setReportOpen(true)}>Report this listing</button><span>·</span><span>Payment and pickup arranged directly</span></div></div></div>{messageOpen && <MessageComposer product={product} onClose={() => setMessageOpen(false)} user={user} />}{reportOpen && <ReportDialog product={product} onClose={() => setReportOpen(false)} mutation={report} />}</div>;
+  return <div className="detail-page"><Link href="/products" className="back-link"><ChevronLeft size={16} /> Back to browse</Link><div className="detail-layout"><div className="detail-visual"><div className="detail-image">{product.image ? <img src={product.image} alt={product.name} className="detail-img-element" /> : <ProductIllustration category={product.category} />}{product.isRescue && <span className="rescue-badge"><CircleAlert size={13} /> Rescue listing</span>}</div><div className="image-caption"><span><Clock3 size={14} /> Posted {relativeDate(product.createdAt)}</span><span>Demo listing</span></div></div><div className="detail-copy"><div className="product-topline"><span>{product.category}</span><span className={`status status-${product.status.toLowerCase()}`}>{product.status}</span></div><h1>{product.name}</h1><p className="detail-description">{product.description || "A local listing from a Samar producer."}</p><div className="detail-price">₱{product.price.toLocaleString()} <small>per {product.unit}</small></div><div className="detail-facts"><div><span>Available</span><strong>{product.quantity} {product.unit}</strong></div><div><span>Location</span><strong>{product.location}</strong></div><div><span>Ready from</span><strong>{product.availabilityDate || "Today"}</strong></div></div><div className="producer-box"><span className="avatar avatar-large">{initials(product.producerName)}</span><div><span>Listed by</span><Link href={`/profile/${product.producerId}`}>{product.producerName}</Link><small>{product.producerType || "Local producer"}</small></div><Link href={`/profile/${product.producerId}`} className="icon-circle"><ArrowRight size={16} /></Link></div>{isOwner ? <div className="detail-actions"><Link href={`/products/${id}/edit`} className="button button-primary"><Pencil size={16} /> Edit listing</Link><button className="button button-outline" onClick={() => setMessageOpen(true)}>View interest</button></div> : user?.userType === "Buyer" ? <div className="detail-actions"><div className="quantity-input"><button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button><strong>{quantity}</strong><button onClick={() => setQuantity(Math.min(product.quantity, quantity + 1))}>+</button><span>{product.unit}</span></div><button disabled={product.status !== "Available" || reserve.isPending} className="button button-primary button-grow" onClick={() => reserve.mutate({ data: { productId: id, quantity } })}>{reserve.isSuccess ? <><Check size={17} /> Reserved</> : <>Reserve product <ArrowRight size={17} /></>}</button><button className="button button-outline icon-button" onClick={() => setMessageOpen(true)}><MessageCircle size={17} /></button></div> : <div className="detail-actions"><Link href="/login" className="button button-primary button-grow">Log in to reserve <ArrowRight size={17} /></Link></div>}{reserve.isError && <p className="form-error">{errorMessage(reserve.error)}</p>}<div className="detail-links"><button onClick={() => setReportOpen(true)}>Report this listing</button><span>·</span><span>Payment and pickup arranged directly</span></div></div></div>{messageOpen && <MessageComposer product={product} onClose={() => setMessageOpen(false)} user={user} />}{reportOpen && <ReportDialog product={product} onClose={() => setReportOpen(false)} mutation={report} />}</div>;
 }
 
 function MessageComposer({ product, user, onClose }: { product: Product; user?: User | null; onClose: () => void }) { const send = useSendMessage({ mutation: { onSuccess: onClose } }); const [message, setMessage] = useState(`Hi ${product.producerName}, I’m interested in your ${product.name}. Is it still available?`); if (!user) return <Dialog title="Sign in to contact the producer" onClose={onClose}><Link className="button button-primary" href="/login">Log in</Link></Dialog>; return <Dialog title={`Message ${product.producerName}`} onClose={onClose}><p className="dialog-copy">Start a conversation about this listing.</p><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} /><button className="button button-primary" disabled={send.isPending || !message.trim()} onClick={() => send.mutate({ data: { receiverId: product.producerId, productId: product.id, message } })}>Send message <ArrowRight size={16} /></button></Dialog>; }
@@ -280,18 +521,176 @@ function DashboardPage({ user }: { user?: User | null }) {
   const { data: reservations = [] } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } });
   const producer = user.userType === "Farmer" || user.userType === "Fisherfolk";
   const own = products.filter((p) => p.producerId === user.id);
-  return <div className="dashboard-page"><div className="dashboard-welcome"><div><span className="eyebrow">Good morning, {user.fullName.split(" ")[0]}</span><h1>{producer ? "Your local harvest hub." : "Your food, closer to home."}</h1><p>{producer ? "Keep your listings fresh and see who is looking for your products." : "Discover the latest surplus and keep track of what you’ve reserved."}</p></div><Link href={producer ? "/products/new" : "/products"} className="button button-primary">{producer ? <><Plus size={17} /> Add a listing</> : <>Browse products <ArrowRight size={17} /></>}</Link></div><div className="dashboard-cards"><MetricCard icon={<Package />} label={producer ? "Total listings" : "Reservations"} value={producer ? own.length : reservations.length} tone="green" /><MetricCard icon={<Clock3 />} label={producer ? "Available now" : "Pending"} value={producer ? own.filter((p) => p.status === "Available").length : reservations.filter((r) => r.status === "Pending").length} tone="yellow" /><MetricCard icon={<HeartHandshake />} label={producer ? "Rescued" : "Confirmed"} value={producer ? own.filter((p) => p.isRescue).length : reservations.filter((r) => r.status === "Confirmed").length} tone="blue" /></div><div className="dashboard-grid"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">Keep an eye on it</span><h2>{producer ? "Your recent listings" : "Your recent reservations"}</h2></div><Link href={producer ? "/my-products" : "/reservations"} className="text-link">View all <ArrowRight size={15} /></Link></div>{producer ? own.slice(0, 3).map((p) => <MiniProduct key={p.id} product={p} />) : reservations.slice(0, 3).map((r) => <ReservationRow key={r.id} reservation={r} />)}{!(producer ? own.length : reservations.length) && <EmptyState title="Nothing here yet" copy={producer ? "Your first listing can help rescue a harvest." : "Reserve a product to see it here."} />}</div><div className="panel dashboard-tip"><div className="tip-illustration"><Leaf size={31} /></div><span className="eyebrow">A little reminder</span><h2>Local food travels less, and means more.</h2><p>When you buy from a nearby producer, more value stays in the community.</p><Link href="/about" className="text-link">Learn about our mission <ArrowRight size={15} /></Link></div></div></div>;
+  return <div className="dashboard-page"><div className="dashboard-welcome"><div><span className="eyebrow">Good morning, {user.fullName.split(" ")[0]}</span><h1>{producer ? "Your local harvest hub." : "Your food, closer to home."}</h1><p>{producer ? "Keep your listings fresh and see who is looking for your products." : "Discover the latest surplus and keep track of what you’ve reserved."}</p></div><div style={{ display: "flex", gap: "10px", alignItems: "center" }}><Link href="/activity" className="button button-outline"><History size={16} /> Activity history</Link><Link href={producer ? "/products/new" : "/products"} className="button button-primary">{producer ? <><Plus size={17} /> Add a listing</> : <>Browse products <ArrowRight size={17} /></>}</Link></div></div><div className="dashboard-cards"><MetricCard icon={<Package />} label={producer ? "Total listings" : "Reservations"} value={producer ? own.length : reservations.length} tone="green" /><MetricCard icon={<Clock3 />} label={producer ? "Available now" : "Pending"} value={producer ? own.filter((p) => p.status === "Available").length : reservations.filter((r) => r.status === "Pending").length} tone="yellow" /><MetricCard icon={<HeartHandshake />} label={producer ? "Rescued" : "Confirmed"} value={producer ? own.filter((p) => p.isRescue).length : reservations.filter((r) => r.status === "Confirmed").length} tone="blue" /></div><div className="dashboard-grid"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">Keep an eye on it</span><h2>{producer ? "Your recent listings" : "Your recent reservations"}</h2></div><Link href={producer ? "/my-products" : "/reservations"} className="text-link">View all <ArrowRight size={15} /></Link></div>{producer ? own.slice(0, 3).map((p) => <MiniProduct key={p.id} product={p} />) : reservations.slice(0, 3).map((r) => <ReservationRow key={r.id} reservation={r} />)}{!(producer ? own.length : reservations.length) && <EmptyState title="Nothing here yet" copy={producer ? "Your first listing can help rescue a harvest." : "Reserve a product to see it here."} />}</div><div className="panel dashboard-tip"><div className="tip-illustration"><Leaf size={31} /></div><span className="eyebrow">A little reminder</span><h2>Local food travels less, and means more.</h2><p>When you buy from a nearby producer, more value stays in the community.</p><Link href="/about" className="text-link">Learn about our mission <ArrowRight size={15} /></Link></div></div></div>;
 }
 function MetricCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: string }) { return <div className={`metric-card metric-${tone}`}><span className="metric-icon">{icon}</span><div><strong>{value.toString().padStart(2, "0")}</strong><span>{label}</span></div></div>; }
-function MiniProduct({ product }: { product: Product }) { return <Link href={`/products/${product.id}`} className="mini-row"><span className="mini-product-icon"><ProductIllustration category={product.category} /></span><span><strong>{product.name}</strong><small>{product.location}</small></span><b>₱{product.price.toLocaleString()}</b><ArrowRight size={15} /></Link>; }
+function MiniProduct({ product }: { product: Product }) { return <Link href={`/products/${product.id}`} className="mini-row"><span className="mini-product-icon">{product.image ? <img src={product.image} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }} /> : <ProductIllustration category={product.category} />}</span><span><strong>{product.name}</strong><small>{product.location}</small></span><b>₱{product.price.toLocaleString()}</b><ArrowRight size={15} /></Link>; }
 function ReservationRow({ reservation }: { reservation: Reservation }) { return <div className="mini-row"><span className="mini-product-icon"><Package size={20} /></span><span><strong>{reservation.productName}</strong><small>{reservation.quantity} {reservation.unit} · {reservation.producerName}</small></span><span className={`status status-${reservation.status.toLowerCase()}`}>{reservation.status}</span></div>; }
 
 function MyProductsPage({ user }: { user?: User | null }) { const params = { includeUnavailable: true, sort: "newest" as const }; const { data: products = [], isLoading } = useGetProducts(params, { query: { enabled: !!user, queryKey: getGetProductsQueryKey(params) } }); const mine = products.filter((p) => p.producerId === user?.id); return <div className="content-page"><PageIntro eyebrow="Producer space" title="My products" copy="Keep your listings up to date so buyers know what is fresh and available." action={<Link href="/products/new" className="button button-primary"><Plus size={17} /> Add product</Link>} />{isLoading ? <LoadingState /> : mine.length ? <div className="manage-list">{mine.map((product) => <ManageProduct key={product.id} product={product} />)}</div> : <EmptyState title="Your marketplace is ready" copy="Post your first surplus listing and connect with a nearby buyer." action={<Link className="button button-primary" href="/products/new">Create a listing <ArrowRight size={16} /></Link>} />}</div>; }
-function ManageProduct({ product }: { product: Product }) { const queryClient = useQueryClient(); const sold = useMarkProductSold({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }); } } }); const remove = useMutation({ mutationFn: () => fetch(`/api/products/${product.id}`, { method: "DELETE" }), onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }) }); return <div className="manage-product"><span className="manage-image"><ProductIllustration category={product.category} /></span><div className="manage-info"><div className="product-topline"><span>{product.category}</span><span className={`status status-${product.status.toLowerCase()}`}>{product.status}</span></div><h3>{product.name}</h3><p>{product.location} · {product.quantity} {product.unit} · ₱{product.price.toLocaleString()}/{product.unit}</p></div><div className="manage-actions"><Link href={`/products/${product.id}/edit`} className="icon-action" aria-label="Edit"><Pencil size={16} /></Link>{product.status !== "Sold" && <button className="icon-action" onClick={() => sold.mutate({ id: product.id })} aria-label="Mark as sold"><Check size={16} /></button>}<button className="icon-action danger" onClick={() => remove.mutate()} aria-label="Delete"><Trash2 size={16} /></button></div></div>; }
+function ManageProduct({ product }: { product: Product }) { const queryClient = useQueryClient(); const sold = useMarkProductSold({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }); } } }); const remove = useMutation({ mutationFn: () => fetch(`/api/products/${product.id}`, { method: "DELETE" }), onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }) }); return <div className="manage-product"><span className="manage-image">{product.image ? <img src={product.image} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }} /> : <ProductIllustration category={product.category} />}</span><div className="manage-info"><div className="product-topline"><span>{product.category}</span><span className={`status status-${product.status.toLowerCase()}`}>{product.status}</span></div><h3>{product.name}</h3><p>{product.location} · {product.quantity} {product.unit} · ₱{product.price.toLocaleString()}/{product.unit}</p></div><div className="manage-actions"><Link href={`/products/${product.id}/edit`} className="icon-action" aria-label="Edit"><Pencil size={16} /></Link>{product.status !== "Sold" && <button className="icon-action" onClick={() => sold.mutate({ id: product.id })} aria-label="Mark as sold"><Check size={16} /></button>}<button className="icon-action danger" onClick={() => remove.mutate()} aria-label="Delete"><Trash2 size={16} /></button></div></div>; }
 
 function ReservationsPage({ user }: { user?: User | null }) { const { data: reservations = [] } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } }); const update = useUpdateReservation({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetReservationsQueryKey() }); queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }); } } }); if (!user) return <AuthRequired title="Your reservations are private" copy="Log in to view and manage your reservations." />; return <div className="content-page"><PageIntro eyebrow={user.userType === "Buyer" ? "Your buying activity" : "Producer activity"} title="Reservations" copy={user.userType === "Buyer" ? "Keep track of the products you’ve asked to reserve." : "See who is interested in your products and update reservation status."} />{reservations.length ? <div className="reservation-list">{reservations.map((r) => <div className="reservation-card" key={r.id}><div className="reservation-icon"><Package size={21} /></div><div className="reservation-main"><div className="product-topline"><span>{user.userType === "Buyer" ? `From ${r.producerName}` : `Buyer: ${r.buyerName}`}</span><span className={`status status-${r.status.toLowerCase()}`}>{r.status}</span></div><h3>{r.productName}</h3><p>{r.quantity} {r.unit} · {relativeDate(r.createdAt)}</p></div>{user.userType !== "Buyer" && r.status === "Pending" && <div className="reservation-actions"><button className="button button-small button-primary" onClick={() => update.mutate({ id: r.id, data: { status: "Confirmed" } })}>Confirm</button><button className="button button-small button-outline" onClick={() => update.mutate({ id: r.id, data: { status: "Cancelled" } })}>Decline</button></div>}{user.userType === "Buyer" && (r.status === "Pending" || r.status === "Confirmed") && <div className="reservation-actions"><button className="button button-small button-outline" onClick={() => update.mutate({ id: r.id, data: { status: "Cancelled" } })}>Cancel reservation</button></div>}</div>)}</div> : <EmptyState title="No reservations yet" copy={user.userType === "Buyer" ? "Browse the marketplace when you’re ready to find something nearby." : "Reservations from buyers will appear here."} action={<Link href="/products" className="button button-primary">Browse products <ArrowRight size={16} /></Link>} />}</div>; }
 
 function MessagesPage({ user }: { user?: User | null }) { const { data: messages = [] } = useGetMessages({ query: { enabled: !!user, queryKey: getGetMessagesQueryKey() } }); const markRead = useMarkMessageRead({ mutation: { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMessagesQueryKey() }) } }); if (!user) return <AuthRequired title="Your conversations are private" copy="Log in to see your messages." />; return <div className="content-page"><PageIntro eyebrow="Stay connected" title="Messages" copy="Talk directly with producers and buyers about listings, pickup, and details." />{messages.length ? <div className="messages-list">{messages.map((m) => <div className={`message-card ${!m.isRead && m.receiverId === user.id ? "unread" : ""}`} key={m.id}><span className="avatar avatar-large">{initials(m.senderId === user.id ? m.receiverName : m.senderName)}</span><div><div className="message-header"><strong>{m.senderId === user.id ? `To ${m.receiverName}` : m.senderName}</strong><small>{relativeDate(m.createdAt)}</small></div><p>{m.message}</p>{m.productName && <span className="message-product"><Package size={13} /> {m.productName}</span>}</div>{!m.isRead && m.receiverId === user.id && <button className="mark-read" onClick={() => markRead.mutate({ id: m.id })}>Mark read</button>}</div>)}</div> : <EmptyState title="No messages yet" copy="When you ask about a listing, your conversation will show up here." />}</div>; }
+
+type ActivityItem = {
+  id: number;
+  userId: number;
+  type: string;
+  action: string;
+  details: string | null;
+  entityId: number | null;
+  entityType: string | null;
+  createdAt: string;
+};
+
+function ActivityHistoryPage({ user }: { user?: User | null }) {
+  const [filter, setFilter] = useState("all");
+  const queryClient = useQueryClient();
+
+  const { data: activities = [], isLoading } = useQuery<ActivityItem[]>({
+    queryKey: ["activities", filter],
+    queryFn: async () => {
+      const url = filter !== "all" ? `/api/activities?type=${filter}` : "/api/activities";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to load activity history");
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  const clearHistory = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/activities", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to clear activity history");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["activities"] });
+    },
+  });
+
+  if (!user) {
+    return (
+      <AuthRequired
+        title="Sign in to view your activity history"
+        copy="Keep track of your listings, reservations, messages, and platform actions in Samar AgriRescue."
+      />
+    );
+  }
+
+  const filterTabs = [
+    { id: "all", label: "All activity" },
+    { id: "product", label: "Listings" },
+    { id: "reservation", label: "Reservations" },
+    { id: "message", label: "Messages" },
+    { id: "user", label: "Account" },
+  ];
+
+  const getActivityIcon = (type: string) => {
+    if (type.includes("product")) return <Package size={18} />;
+    if (type.includes("reservation")) return <CheckCircle2 size={18} />;
+    if (type.includes("message")) return <MessageCircle size={18} />;
+    if (type.includes("report")) return <CircleAlert size={18} />;
+    return <UserRound size={18} />;
+  };
+
+  const getActivityIconClass = (type: string) => {
+    if (type.includes("product")) return "activity-icon-product";
+    if (type.includes("reservation")) return "activity-icon-reservation";
+    if (type.includes("message")) return "activity-icon-message";
+    if (type.includes("report")) return "activity-icon-report";
+    return "activity-icon-user";
+  };
+
+  return (
+    <div className="content-page activity-page">
+      <div className="activity-header">
+        <PageIntro
+          eyebrow="Audit & Timeline"
+          title="Activity History"
+          copy="A full chronological record of your listings, reservations, messages, and interactions."
+        />
+        {activities.length > 0 && (
+          <button
+            className="clear-history-btn"
+            onClick={() => {
+              if (window.confirm("Are you sure you want to clear your activity history?")) {
+                clearHistory.mutate();
+              }
+            }}
+            disabled={clearHistory.isPending}
+          >
+            <Trash2 size={14} /> Clear history
+          </button>
+        )}
+      </div>
+
+      <div className="activity-filter-bar">
+        {filterTabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`activity-filter-btn ${filter === tab.id ? "active" : ""}`}
+            onClick={() => setFilter(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <LoadingState />
+      ) : activities.length ? (
+        <div className="activity-list">
+          {activities.map((item) => (
+            <div className="activity-card" key={item.id}>
+              <div className={`activity-icon-wrap ${getActivityIconClass(item.type)}`}>
+                {getActivityIcon(item.type)}
+              </div>
+              <div className="activity-content">
+                <div className="activity-topline">
+                  <span className="activity-title">{item.action}</span>
+                  <span className="activity-time">{relativeDate(item.createdAt)}</span>
+                </div>
+                {item.details && <p className="activity-details">{item.details}</p>}
+                <div className="activity-actions">
+                  {item.entityType === "product" && item.entityId && (
+                    <Link href={`/products/${item.entityId}`} className="text-link">
+                      View listing <ArrowRight size={13} />
+                    </Link>
+                  )}
+                  {item.entityType === "reservation" && (
+                    <Link href="/reservations" className="text-link">
+                      View reservation <ArrowRight size={13} />
+                    </Link>
+                  )}
+                  {item.entityType === "message" && (
+                    <Link href="/messages" className="text-link">
+                      View messages <ArrowRight size={13} />
+                    </Link>
+                  )}
+                  <span style={{ fontSize: "10px", color: "var(--ink-soft)", marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <Clock3 size={11} /> {new Date(item.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="No activity recorded yet"
+          copy={filter === "all" ? "Actions you take on Samar AgriRescue will appear here." : "No activities found in this category."}
+          action={
+            <Link href="/products" className="button button-primary">
+              Browse products <ArrowRight size={16} />
+            </Link>
+          }
+        />
+      )}
+    </div>
+  );
+}
 
 function ProductFormPage({ user, productId }: { user?: User | null; productId?: number }) {
   const editing = !!productId;
@@ -355,7 +754,7 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
         <Field label="Unit" required><select value={form.unit} onChange={(e) => setField("unit", e.target.value)}>{units.map((u) => <option key={u}>{u}</option>)}</select></Field>
         <Field label="Location" required><input required value={form.location} onChange={(e) => setField("location", e.target.value)} /></Field>
         <Field label="Available from"><input type="date" value={form.availabilityDate ?? ""} onChange={(e) => setField("availabilityDate", e.target.value)} /></Field>
-        <Field label="Product image URL"><input value={form.image ?? ""} onChange={(e) => setField("image", e.target.value)} placeholder="Optional photo URL" /></Field>
+        <div className="field field-wide"><span style={{ fontWeight: 700, fontSize: "11px", marginBottom: "7px" }}>Product photo</span><ProductImagePicker value={form.image} onChange={(url) => setField("image", url)} /></div>
       </div>
       <label className="rescue-check"><input type="checkbox" checked={form.isRescue ?? false} onChange={(e) => setField("isRescue", e.target.checked)} /><span className="check-box">{form.isRescue && <Check size={13} />}</span><span><strong>Mark as Rescue Listing</strong><small>Highlight this product for buyers who want to act quickly.</small></span></label></div>
       <div className="form-foot"><p><ShieldCheck size={15} /> Be accurate about your quantity and location. Buyers and sellers arrange payment and pickup directly.</p><button className="button button-primary" disabled={create.isPending || update.isPending}>{editing ? "Save changes" : "Publish listing"} <ArrowRight size={16} /></button></div>
@@ -376,7 +775,7 @@ function AdminProductsPanel() { const [search, setSearch] = useState(""); const 
 function AdminReportsPanel() { const { data: reports = [] } = useGetAdminReports(); const update = useUpdateAdminReport({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAdminReportsQueryKey() }); queryClient.invalidateQueries({ queryKey: getGetAdminSummaryQueryKey() }); } } }); return <div className="admin-panel"><PanelTitle eyebrow="Keep it trustworthy" title="Reports" />{reports.length ? <div className="report-list">{reports.map((r) => <div className="report-card" key={r.id}><div><span className={`status status-${r.status.toLowerCase()}`}>{r.status}</span><h3>{r.productName}</h3><p>{r.reason}</p><small>Reported by {r.reporterName} · {relativeDate(r.createdAt)}</small></div>{r.status === "Open" && <button className="button button-small button-primary" onClick={() => update.mutate({ id: r.id, data: { status: "Resolved" } })}>Resolve</button>}</div>)}</div> : <EmptyState title="No reports" copy="The community is looking healthy." />}</div>; }
 function PanelTitle({ eyebrow, title }: { eyebrow: string; title: string }) { return <div className="panel-heading"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div></div>; }
 
-function LoginPage() { const [, navigate] = useLocation(); const login = useLogin({ mutation: { onSuccess: (data) => { queryClient.setQueryData(getGetCurrentUserQueryKey(), data); navigate(data.user?.userType === "Administrator" ? "/admin" : "/dashboard"); } } }); return <AuthLayout eyebrow="Welcome back" title="Good to see you again."><form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); login.mutate({ data: { username: String(f.get("username")), password: String(f.get("password")) } }); }}><Field label="Username" required><input name="username" required autoComplete="username" placeholder="your username" /></Field><Field label="Password" required><input name="password" required type="password" autoComplete="current-password" placeholder="Your password" /></Field>{login.isError && <p className="form-error">{errorMessage(login.error, "We couldn't sign you in.")}</p>}<button className="button button-primary button-grow" disabled={login.isPending}>Log in <ArrowRight size={17} /></button><p className="form-hint">Demo buyer: <b>mayabuyer</b> / demo123 · Demo producer: <b>juanfarmer</b> / demo123 · Demo admin: <b>admin</b> / admin123</p></form></AuthLayout>; }
+function LoginPage() { const [, navigate] = useLocation(); const login = useLogin({ mutation: { onSuccess: (data) => { queryClient.setQueryData(getGetCurrentUserQueryKey(), data); navigate(data.user?.userType === "Administrator" ? "/admin" : "/dashboard"); } } }); return <AuthLayout eyebrow="Welcome back" title="Good to see you again."><form onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); login.mutate({ data: { username: String(f.get("username")), password: String(f.get("password")) } }); }}><Field label="Username" required><input name="username" required autoComplete="username" placeholder="your username" /></Field><Field label="Password" required><PasswordInput name="password" required autoComplete="current-password" placeholder="Your password" /></Field>{login.isError && <p className="form-error">{errorMessage(login.error, "We couldn't sign you in.")}</p>}<button className="button button-primary button-grow" disabled={login.isPending}>Log in <ArrowRight size={17} /></button><p className="form-hint">Demo buyer: <b>mayabuyer</b> / demo123 · Demo producer: <b>juanfarmer</b> / demo123 · Demo admin: <b>admin</b> / admin123</p></form></AuthLayout>; }
 function RegisterPage() {
   const [, navigate] = useLocation();
   const [passwordMismatch, setPasswordMismatch] = useState(false);
@@ -408,8 +807,8 @@ function RegisterPage() {
         <Field label="Phone number" required><input name="phone" required placeholder="09XX XXX XXXX" /></Field>
         <Field label="Location" required><input name="location" required placeholder="City or municipality, Samar" /></Field>
         <Field label="I am a" required><select name="userType"><option>Farmer</option><option>Fisherfolk</option><option>Buyer</option></select></Field>
-        <Field label="Password" required wide><input name="password" required minLength={6} type="password" autoComplete="new-password" placeholder="At least 6 characters" onChange={() => setPasswordMismatch(false)} /></Field>
-        <Field label="Confirm password" required wide><input name="passwordConfirm" required minLength={6} type="password" autoComplete="new-password" placeholder="Enter your password again" onChange={() => setPasswordMismatch(false)} /></Field>
+        <Field label="Password" required wide><PasswordInput name="password" required minLength={6} autoComplete="new-password" placeholder="At least 6 characters" onChange={() => setPasswordMismatch(false)} /></Field>
+        <Field label="Confirm password" required wide><PasswordInput name="passwordConfirm" required minLength={6} autoComplete="new-password" placeholder="Enter your password again" onChange={() => setPasswordMismatch(false)} /></Field>
       </div>
       {passwordMismatch && <p className="form-error">The passwords do not match.</p>}
       {register.isError && <p className="form-error">{errorMessage(register.error, "We couldn't create that account.")}</p>}

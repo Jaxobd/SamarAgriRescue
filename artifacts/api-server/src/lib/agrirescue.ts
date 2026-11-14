@@ -11,11 +11,13 @@ import {
 } from "drizzle-orm";
 import {
   db,
+  activitiesTable,
   messagesTable,
   productsTable,
   reportsTable,
   reservationsTable,
   usersTable,
+  type Activity,
   type Product,
   type User,
 } from "@workspace/db";
@@ -269,3 +271,30 @@ export async function producerFor(id: number) {
 }
 
 export const statusChoices = ["Pending", "Confirmed", "Cancelled", "Completed"] as const;
+
+export async function logActivity(entry: {
+  userId: number;
+  type: string;
+  action: string;
+  details?: string | null;
+  entityId?: number | null;
+  entityType?: string | null;
+}) {
+  try {
+    const [row] = await db
+      .insert(activitiesTable)
+      .values({
+        userId: entry.userId,
+        type: entry.type,
+        action: entry.action,
+        details: entry.details ?? null,
+        entityId: entry.entityId ?? null,
+        entityType: entry.entityType ?? null,
+      })
+      .returning();
+    return row;
+  } catch (err) {
+    console.warn("Failed to log activity:", err);
+    return null;
+  }
+}

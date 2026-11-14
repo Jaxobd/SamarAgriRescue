@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import {
   db,
+  activitiesTable,
   messagesTable,
   productsTable,
   reportsTable,
@@ -46,6 +47,7 @@ import {
   currentUser,
   hashPassword,
   listProducts,
+  logActivity,
   productWithProducer,
   producerFor,
   sessionCookie,
@@ -120,6 +122,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     passwordHash: hashPassword(parsed.data.password),
   }).returning();
   res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
+  await logActivity({
+    userId: user.id,
+    type: "user_registered",
+    action: "Joined Samar AgriRescue",
+    details: `Registered as ${user.userType} in ${user.location || "Samar"}`,
+    entityId: user.id,
+    entityType: "user",
+  });
   res.status(201).json(RegisterResponse.parse({ user: toUser(user) }));
 });
 
@@ -135,6 +145,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
+  await logActivity({
+    userId: user.id,
+    type: "user_login",
+    action: "Signed in to account",
+    details: `Signed in as ${user.userType}`,
+    entityId: user.id,
+    entityType: "user",
+  });
   res.json(LoginResponse.parse({ user: toUser(user) }));
 });
 
@@ -181,6 +199,14 @@ router.post("/products", async (req, res): Promise<void> => {
     availabilityDate: parsed.data.availabilityDate,
     isRescue: parsed.data.isRescue ?? false,
   }).returning();
+  await logActivity({
+    userId: user.id,
+    type: "product_created",
+    action: `Listed ${product.name}`,
+    details: `₱${product.price}/${product.unit} · ${product.quantity} ${product.unit} in ${product.location}`,
+    entityId: product.id,
+    entityType: "product",
+  });
   res.status(201).json(GetProductResponse.parse(await productWithProducer(product)));
 });
 
@@ -222,6 +248,14 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     quantity: parsed.data.quantity == null ? existing.quantity : String(parsed.data.quantity),
     updatedAt: new Date(),
   }).where(eq(productsTable.id, id)).returning();
+  await logActivity({
+    userId: user.id,
+    type: "product_updated",
+    action: `Updated listing: ${product.name}`,
+    details: `₱${product.price}/${product.unit} · ${product.quantity} ${product.unit}`,
+    entityId: product.id,
+    entityType: "product",
+  });
   res.json(GetProductResponse.parse(await productWithProducer(product)));
 });
 
@@ -243,6 +277,14 @@ router.delete("/products/:id", async (req, res): Promise<void> => {
     return;
   }
   await db.delete(productsTable).where(eq(productsTable.id, id));
+  await logActivity({
+    userId: user.id,
+    type: "product_deleted",
+    action: `Removed listing: ${existing.name}`,
+    details: `Category: ${existing.category} · ${existing.location}`,
+    entityId: existing.id,
+    entityType: "product",
+  });
   res.sendStatus(204);
 });
 
@@ -264,6 +306,14 @@ router.post("/products/:id/sold", async (req, res): Promise<void> => {
     return;
   }
   const [product] = await db.update(productsTable).set({ status: "Sold", updatedAt: new Date() }).where(eq(productsTable.id, id)).returning();
+  await logActivity({
+    userId: user.id,
+    type: "product_sold",
+    action: `Marked as sold: ${product.name}`,
+    details: `All ${product.quantity} ${product.unit} sold`,
+    entityId: product.id,
+    entityType: "product",
+  });
   res.json(GetProductResponse.parse(await productWithProducer(product)));
 });
 
@@ -332,6 +382,22 @@ router.post("/reservations", async (req, res): Promise<void> => {
     return;
   }
   const { product, reservation } = result;
+  await logActivity({
+    userId: user.id,
+    type: "reservation_created",
+    action: `Reserved ${parsed.data.quantity} ${product.unit} of ${product.name}`,
+    details: `₱${(Number(product.price) * parsed.data.quantity).toLocaleString()} total · Status: Pending`,
+    entityId: reservation.id,
+    entityType: "reservation",
+  });
+  await logActivity({
+    userId: product.producerId,
+    type: "reservation_received",
+    action: `New reservation for ${product.name}`,
+    details: `${user.fullName} reserved ${parsed.data.quantity} ${product.unit}`,
+    entityId: reservation.id,
+    entityType: "reservation",
+  });
   res.status(201).json({
     id: reservation.id,
     productId: product.id,
@@ -404,6 +470,24 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     return;
   }
   const { reservation, product, buyer } = result;
+  await logActivity({
+    userId: user.id,
+    type: `reservation_${parsed.data.status.toLowerCase()}`,
+    action: `Updated reservation status to ${parsed.data.status}`,
+    details: `${product.name} (${reservation.quantity} ${product.unit})`,
+    entityId: reservation.id,
+    entityType: "reservation",
+  });
+  if (user.id !== buyer.id) {
+    await logActivity({
+      userId: buyer.id,
+      type: `reservation_${parsed.data.status.toLowerCase()}`,
+      action: `Reservation ${parsed.data.status}`,
+      details: `${product.name} (${reservation.quantity} ${product.unit}) was marked as ${parsed.data.status}`,
+      entityId: reservation.id,
+      entityType: "reservation",
+    });
+  }
   res.json({
     id: reservation.id,
     productId: product.id,
@@ -462,6 +546,14 @@ router.post("/messages", async (req, res): Promise<void> => {
     message: parsed.data.message,
   }).returning();
   const [receiver] = await db.select().from(usersTable).where(eq(usersTable.id, message.receiverId));
+  await logActivity({
+    userId: user.id,
+    type: "message_sent",
+    action: `Sent message to ${receiver?.fullName ?? "producer"}`,
+    details: parsed.data.message.slice(0, 100),
+    entityId: message.id,
+    entityType: "message",
+  });
   res.status(201).json({
     id: message.id,
     senderId: user.id,
@@ -516,6 +608,14 @@ router.patch("/profile", async (req, res): Promise<void> => {
     return;
   }
   const [updated] = await db.update(usersTable).set(parsed.data).where(eq(usersTable.id, user.id)).returning();
+  await logActivity({
+    userId: user.id,
+    type: "profile_updated",
+    action: "Updated profile details",
+    details: `Location: ${updated.location || "Samar"}`,
+    entityId: user.id,
+    entityType: "profile",
+  });
   res.json({ ...toUser(updated), products: (await listProducts({ availableOnly: false })).filter((product) => product.producerId === user.id) });
 });
 
@@ -533,6 +633,14 @@ router.post("/reports", async (req, res): Promise<void> => {
     return;
   }
   const [report] = await db.insert(reportsTable).values({ ...parsed.data, reporterId: user.id }).returning();
+  await logActivity({
+    userId: user.id,
+    type: "report_submitted",
+    action: `Reported listing: ${product.name}`,
+    details: report.reason,
+    entityId: report.id,
+    entityType: "report",
+  });
   res.status(201).json({ id: report.id, reporterId: user.id, reporterName: user.fullName, productId: product.id, productName: product.name, reason: report.reason, description: report.description, status: report.status, createdAt: report.createdAt.toISOString() });
 });
 
@@ -604,7 +712,20 @@ router.delete("/admin/products/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid product id." });
     return;
   }
+  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Product not found." });
+    return;
+  }
   await db.delete(productsTable).where(eq(productsTable.id, id));
+  await logActivity({
+    userId: admin.id,
+    type: "product_deleted",
+    action: `Removed listing: ${existing.name}`,
+    details: `Category: ${existing.category} · ${existing.location}`,
+    entityId: existing.id,
+    entityType: "product",
+  });
   res.sendStatus(204);
 });
 
@@ -632,6 +753,109 @@ router.patch("/admin/reports/:id", async (req, res): Promise<void> => {
   const [reporter] = await db.select().from(usersTable).where(eq(usersTable.id, report.reporterId));
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, report.productId));
   res.json({ id: report.id, reporterId: report.reporterId, reporterName: reporter?.fullName ?? "User", productId: report.productId, productName: product?.name ?? "Removed listing", reason: report.reason, description: report.description, status: report.status, createdAt: report.createdAt.toISOString() });
+});
+
+router.get("/activities", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  const typeFilter = req.query.type as string | undefined;
+
+  let rows = await db
+    .select()
+    .from(activitiesTable)
+    .where(eq(activitiesTable.userId, user.id))
+    .orderBy(desc(activitiesTable.createdAt))
+    .limit(100);
+
+  if (rows.length === 0) {
+    const synthetic: {
+      id: number;
+      userId: number;
+      type: string;
+      action: string;
+      details: string | null;
+      entityId: number | null;
+      entityType: string | null;
+      createdAt: string;
+    }[] = [];
+
+    synthetic.push({
+      id: 1,
+      userId: user.id,
+      type: "user_registered",
+      action: "Joined Samar AgriRescue",
+      details: `${user.userType} in ${user.location || "Samar"}`,
+      entityId: user.id,
+      entityType: "user",
+      createdAt: user.createdAt.toISOString(),
+    });
+
+    if (user.userType === "Farmer" || user.userType === "Fisherfolk") {
+      const prods = await db.select().from(productsTable).where(eq(productsTable.producerId, user.id)).limit(10);
+      for (let i = 0; i < prods.length; i++) {
+        const p = prods[i];
+        synthetic.push({
+          id: 100 + i,
+          userId: user.id,
+          type: p.status === "Sold" ? "product_sold" : "product_created",
+          action: p.status === "Sold" ? `Sold ${p.name}` : `Listed ${p.name}`,
+          details: `₱${p.price}/${p.unit} · ${p.quantity} ${p.unit} in ${p.location}`,
+          entityId: p.id,
+          entityType: "product",
+          createdAt: p.createdAt.toISOString(),
+        });
+      }
+    }
+
+    const resvs = await db
+      .select({
+        reservation: reservationsTable,
+        product: productsTable,
+      })
+      .from(reservationsTable)
+      .innerJoin(productsTable, eq(reservationsTable.productId, productsTable.id))
+      .where(user.userType === "Buyer" ? eq(reservationsTable.buyerId, user.id) : eq(productsTable.producerId, user.id))
+      .limit(10);
+
+    for (let i = 0; i < resvs.length; i++) {
+      const { reservation, product } = resvs[i];
+      synthetic.push({
+        id: 200 + i,
+        userId: user.id,
+        type: `reservation_${reservation.status.toLowerCase()}`,
+        action: user.userType === "Buyer" ? `Reserved ${reservation.quantity} ${product.unit} of ${product.name}` : `Reservation for ${product.name}`,
+        details: `Status: ${reservation.status} · ₱${product.price}/${product.unit}`,
+        entityId: reservation.id,
+        entityType: "reservation",
+        createdAt: reservation.createdAt.toISOString(),
+      });
+    }
+
+    rows = synthetic.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) as any;
+  }
+
+  if (typeFilter && typeFilter !== "all") {
+    rows = rows.filter((r) => r.type.toLowerCase().includes(typeFilter.toLowerCase()) || r.entityType === typeFilter);
+  }
+
+  res.json(rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    type: r.type,
+    action: r.action,
+    details: r.details,
+    entityId: r.entityId,
+    entityType: r.entityType,
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : r.createdAt.toISOString(),
+  })));
+});
+
+router.delete("/activities", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  await db.delete(activitiesTable).where(eq(activitiesTable.userId, user.id));
+  res.sendStatus(204);
 });
 
 export default router;
