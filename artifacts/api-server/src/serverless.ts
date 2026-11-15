@@ -3,7 +3,8 @@ import { seedDemoData } from "./lib/agrirescue";
 
 let seeded = false;
 
-export default async function handler(req: any, res: any) {
+// Initialize demo data once on first request in serverless
+app.use(async (_req, _res, next) => {
   if (!seeded) {
     try {
       await seedDemoData();
@@ -12,5 +13,7 @@ export default async function handler(req: any, res: any) {
     }
     seeded = true;
   }
-  return app(req, res);
-}
+  next();
+});
+
+export default app;
