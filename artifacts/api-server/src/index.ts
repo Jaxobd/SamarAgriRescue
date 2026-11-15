@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import app from "./app";
-import { logger } from "./lib/logger";
-import { seedDemoData } from "./lib/agrirescue";
 
-// Automatically load .env file if available
+// Automatically load .env file if available before importing app and database modules
 for (const envFile of [
   path.resolve(process.cwd(), ".env"),
   path.resolve(process.cwd(), "artifacts/api-server/.env"),
@@ -16,6 +13,10 @@ for (const envFile of [
     } catch {}
   }
 }
+
+const { default: app } = await import("./app");
+const { logger } = await import("./lib/logger");
+const { seedDemoData } = await import("./lib/agrirescue");
 
 const rawPort = process.env["PORT"] || "5000";
 const port = Number(rawPort);
