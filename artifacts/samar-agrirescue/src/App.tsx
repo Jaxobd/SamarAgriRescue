@@ -770,7 +770,8 @@ function Footer() {
 // ---------------------------------------------------------------------------
 function HomePage({ user }: { user?: User | null }) {
   const { data: stats } = useGetStats();
-  const { data: products = [] } = useGetProducts({ rescue: true, sort: "newest" });
+  const { data: rawProducts } = useGetProducts({ rescue: true, sort: "newest" });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
   return (
     <div className="home-page">
       <section className="hero">
@@ -842,10 +843,11 @@ function HomePage({ user }: { user?: User | null }) {
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
+function Stat({ value, label }: { value?: number | null; label: string }) {
+  const safeVal = typeof value === "number" && !isNaN(value) ? value : 0;
   return (
     <div className="stat">
-      <strong>{value.toString().padStart(2, "0")}</strong>
+      <strong>{safeVal.toString().padStart(2, "0")}</strong>
       <span>{label}</span>
     </div>
   );
@@ -880,7 +882,8 @@ function SectionHeading({ eyebrow, title, action }: { eyebrow: string; title: st
 function ProductsPage() {
   const [filters, setFilters] = useState<GetProductsParams>({ sort: "newest" });
   const [search, setSearch] = useState("");
-  const { data: products = [], isLoading } = useGetProducts({ ...filters, search: search || undefined });
+  const { data: rawProducts, isLoading } = useGetProducts({ ...filters, search: search || undefined });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
 
   return (
     <div className="content-page">
@@ -947,7 +950,8 @@ function ProductsPage() {
 }
 
 function RescuePage() {
-  const { data: products = [] } = useGetProducts({ rescue: true, sort: "newest" });
+  const { data: rawProducts } = useGetProducts({ rescue: true, sort: "newest" });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
   return (
     <div className="content-page rescue-page">
       <div className="rescue-banner">
@@ -1268,11 +1272,13 @@ function Dialog({ title, onClose, children }: { title: string; onClose: () => vo
 // ---------------------------------------------------------------------------
 function DashboardPage({ user }: { user?: User | null }) {
   if (!user) return <AuthRequired title="Your dashboard is waiting" copy="Log in to see your reservations, listings, and messages." />;
-  const { data: products = [] } = useGetProducts(
+  const { data: rawProducts } = useGetProducts(
     { includeUnavailable: true, sort: "newest" },
     { query: { enabled: user.userType !== "Buyer", queryKey: getGetProductsQueryKey({ includeUnavailable: true, sort: "newest" }) } }
   );
-  const { data: reservations = [] } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
+  const { data: rawReservations } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } });
+  const reservations = Array.isArray(rawReservations) ? rawReservations : [];
   const producer = user.userType === "Farmer" || user.userType === "Fisherfolk";
   const own = products.filter((p) => p.producerId === user.id);
 
@@ -1377,9 +1383,10 @@ function ReservationRow({ reservation }: { reservation: Reservation }) {
 // ---------------------------------------------------------------------------
 function MyProductsPage({ user }: { user?: User | null }) {
   const params = { includeUnavailable: true, sort: "newest" as const };
-  const { data: products = [], isLoading } = useGetProducts(params, {
+  const { data: rawProducts, isLoading } = useGetProducts(params, {
     query: { enabled: !!user, queryKey: getGetProductsQueryKey(params) },
   });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
   const mine = products.filter((p) => p.producerId === user?.id);
 
   return (
@@ -1461,7 +1468,8 @@ function ManageProduct({ product }: { product: Product }) {
 // Reservations & Messages
 // ---------------------------------------------------------------------------
 function ReservationsPage({ user }: { user?: User | null }) {
-  const { data: reservations = [] } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } });
+  const { data: rawReservations } = useGetReservations({ query: { enabled: !!user, queryKey: getGetReservationsQueryKey() } });
+  const reservations = Array.isArray(rawReservations) ? rawReservations : [];
   const update = useUpdateReservation({
     mutation: {
       onSuccess: () => {
@@ -1525,7 +1533,8 @@ function ReservationsPage({ user }: { user?: User | null }) {
 }
 
 function MessagesPage({ user }: { user?: User | null }) {
-  const { data: messages = [] } = useGetMessages({ query: { enabled: !!user, queryKey: getGetMessagesQueryKey() } });
+  const { data: rawMessages } = useGetMessages({ query: { enabled: !!user, queryKey: getGetMessagesQueryKey() } });
+  const messages = Array.isArray(rawMessages) ? rawMessages : [];
   const markRead = useMarkMessageRead({
     mutation: {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMessagesQueryKey() }),
@@ -1958,7 +1967,7 @@ function AdminUsersPanel() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<User | null>(null);
 
-  const { data: users = [], isLoading, refetch } = useQuery({
+  const { data: rawUsers, isLoading, refetch } = useQuery({
     queryKey: ["adminUsers", search, roleFilter, statusFilter],
     queryFn: async () => {
       const q = new URLSearchParams();
@@ -1966,9 +1975,12 @@ function AdminUsersPanel() {
       if (roleFilter !== "All") q.set("role", roleFilter);
       if (statusFilter !== "all") q.set("status", statusFilter);
       const res = await fetch(`/api/admin/users?${q.toString()}`);
-      return res.json() as Promise<User[]>;
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? (json as User[]) : [];
     },
   });
+  const users = Array.isArray(rawUsers) ? rawUsers : [];
 
   const update = useUpdateAdminUser({
     mutation: {
@@ -2244,14 +2256,17 @@ function AdminProductsPanel() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
 
-  const { data: products = [], isLoading, refetch } = useQuery({
+  const { data: rawProducts, isLoading, refetch } = useQuery({
     queryKey: ["adminProductsList", search],
     queryFn: async () => {
       const q = search ? `?search=${encodeURIComponent(search)}` : "";
       const res = await fetch(`/api/admin/products${q}`);
-      return res.json() as Promise<Product[]>;
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? (json as Product[]) : [];
     },
   });
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
 
   return (
     <div className="admin-panel">
@@ -2504,7 +2519,8 @@ function AdminProductModal({
 // Admin Reports Panel
 // ---------------------------------------------------------------------------
 function AdminReportsPanel() {
-  const { data: reports = [], refetch } = useGetAdminReports();
+  const { data: rawReports, refetch } = useGetAdminReports();
+  const reports = Array.isArray(rawReports) ? rawReports : [];
   const update = useUpdateAdminReport({
     mutation: {
       onSuccess: () => {
@@ -2556,15 +2572,16 @@ function AdminDatabaseViewer() {
   const [inspectRecord, setInspectRecord] = useState<any | null>(null);
 
   // Fetch list of tables with row counts and column info
-  const { data: tables = [], isLoading: loadingTables, refetch: refetchTables } = useQuery({
+  const { data: rawTables, isLoading: loadingTables, refetch: refetchTables } = useQuery({
     queryKey: ["adminDbTables"],
     queryFn: async () => {
       const res = await fetch("/api/admin/database/tables");
-      return res.json() as Promise<
-        Array<{ id: string; name: string; description: string; columns: string[]; rowCount: number }>
-      >;
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
     },
   });
+  const tables = Array.isArray(rawTables) ? rawTables : [];
 
   // Fetch paginated, sanitized rows for selected table
   const { data: tableData, isLoading: loadingRows, refetch: refetchRows } = useQuery({
@@ -2794,26 +2811,16 @@ function AdminDatabaseViewer() {
 // System Audit Logs / Activities Panel
 // ---------------------------------------------------------------------------
 function AdminActivitiesPanel({ limit, compact = false }: { limit?: number; compact?: boolean }) {
-  const { data: activities = [], isLoading, refetch } = useQuery({
+  const { data: rawActivities, isLoading, refetch } = useQuery({
     queryKey: ["adminActivities"],
     queryFn: async () => {
       const res = await fetch("/api/admin/activities");
-      return res.json() as Promise<
-        Array<{
-          id: number;
-          userId: number | null;
-          userName: string;
-          userType: string;
-          type: string;
-          action: string;
-          details: string | null;
-          entityId: number | null;
-          entityType: string | null;
-          createdAt: string;
-        }>
-      >;
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
     },
   });
+  const activities = Array.isArray(rawActivities) ? rawActivities : [];
 
   const displayed = limit ? activities.slice(0, limit) : activities;
 
@@ -3238,12 +3245,25 @@ function NotFoundPage() {
   );
 }
 
-function initials(name: string) {
-  return name.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
+function initials(name?: string | null) {
+  if (!name || typeof name !== "string") return "AR";
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "AR"
+  );
 }
 
-function relativeDate(date: string) {
-  const hours = Math.round((Date.now() - new Date(date).getTime()) / 3600000);
+function relativeDate(date?: string | null) {
+  if (!date) return "Recently";
+  const parsed = new Date(date).getTime();
+  if (isNaN(parsed)) return "Recently";
+  const hours = Math.round((Date.now() - parsed) / 3600000);
   if (hours < 1) return "Just now";
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;

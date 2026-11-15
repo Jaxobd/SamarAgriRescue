@@ -1,6 +1,4 @@
 import { drizzle as drizzlePg, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import { drizzle as drizzlePglite, type PgliteDatabase } from "drizzle-orm/pglite";
-import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
 import path from "node:path";
 import fs from "node:fs";
@@ -8,7 +6,7 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-export type AppDatabase = NodePgDatabase<typeof schema> | PgliteDatabase<typeof schema>;
+export type AppDatabase = NodePgDatabase<typeof schema> | any;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS agri_users (
@@ -97,9 +95,16 @@ let db: any;
 if (process.env.DATABASE_URL) {
   pool = new Pool({ connectionString: process.env.DATABASE_URL });
   db = drizzlePg(pool, { schema });
+} else if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+  pool = new Pool({ connectionString: DEFAULT_DATABASE_URL });
+  db = drizzlePg(pool, { schema });
 } else {
-  // Try remote default database if configured, or fallback to embedded PGlite
+  // Try local embedded PGlite for local development, or fallback to remote Postgres
   try {
+    const pglitePkgName = "@electric-sql/pglite";
+    const drizzlePglitePkgName = "drizzle-orm/pglite";
+    const { PGlite } = await import(pglitePkgName);
+    const { drizzle: drizzlePglite } = await import(drizzlePglitePkgName);
     const dbDir = path.resolve(process.cwd(), ".data/pgdata");
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });

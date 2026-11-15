@@ -37,25 +37,28 @@ function toError(value: unknown): Error {
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-6">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
       <div className="max-w-lg w-full text-center">
-        <h1 className="text-xl font-semibold text-gray-900">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
           Something went wrong
         </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          This part of the app hit an error. The rest of the app is still
-          running.
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          This part of the app hit an error. The rest of the app is still running.
         </p>
-        {/* Dev only: messages can carry API responses and other internals. */}
-        {import.meta.env.DEV ? (
-          <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
-            {error.message || String(error)}
-          </pre>
-        ) : null}
+        <div className="mt-4 text-left">
+          <details className="rounded border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 p-3 text-xs text-gray-700 dark:text-gray-300">
+            <summary className="cursor-pointer font-medium text-gray-800 dark:text-gray-200">
+              Error details
+            </summary>
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[11px]">
+              {error.message || String(error)}
+            </pre>
+          </details>
+        </div>
         <button
           type="button"
           onClick={resetError}
-          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700"
+          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 cursor-pointer"
         >
           Try again
         </button>

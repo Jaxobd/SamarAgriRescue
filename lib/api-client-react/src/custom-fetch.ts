@@ -362,6 +362,21 @@ export async function customFetch<T = unknown>(
 
   const response = await fetch(input, { ...init, method, headers });
 
+  const contentType = response.headers.get("content-type") || "";
+  const requestUrl = resolveUrl(input);
+
+  // If an API endpoint returns text/html, the route was rewritten to index.html (SPA fallback or offline backend)
+  if (
+    (requestUrl.includes("/api/") || requestUrl.startsWith("/api")) &&
+    contentType.includes("text/html")
+  ) {
+    throw new ApiError(
+      response,
+      { error: "API returned HTML instead of JSON. The backend server may be unreachable." },
+      requestInfo,
+    );
+  }
+
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
     throw new ApiError(response, errorData, requestInfo);

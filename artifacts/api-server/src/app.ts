@@ -64,8 +64,9 @@ app.use(
   }),
 );
 
-// Mount API routes
+// Mount API routes (supports both /api and root mounts)
 app.use("/api", router);
+app.use(router);
 
 // Serve frontend static client assets when built (SPA fallback for Express 5)
 const candidatePaths = [
