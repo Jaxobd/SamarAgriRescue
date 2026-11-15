@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const { Client } = pg;
 
 async function main() {
-  const DEFAULT_DATABASE_URL = "postgresql://neondb_owner:npg_B01aCmyzQUVq@ep-red-darkness-zag421fk-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require";
+  const DEFAULT_DATABASE_URL = "";
   const databaseUrl = process.env.DATABASE_URL || process.argv[2] || DEFAULT_DATABASE_URL;
 
   if (!databaseUrl) {

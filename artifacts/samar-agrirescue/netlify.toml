@@ -1,0 +1,14 @@
+[build]
+  # Vite outputs the site into dist/public (see vite.config.ts)
+  publish = "artifacts/samar-agrirescue/dist/public"
+
+[build.environment]
+  # These values are not secrets: PORT is a plain port number and the OAuth
+  # redirect URI is a public URL, so both legitimately appear in repo files.
+  SECRETS_SCAN_OMIT_KEYS = "PORT,GOOGLE_REDIRECT_URI"
+
+# Single-page app: serve index.html for client-side routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

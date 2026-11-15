@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS agri_activities (
 
 const DEFAULT_DATABASE_URL =
   process.env.DATABASE_URL ||
-  "postgresql://neondb_owner:npg_B01aCmyzQUVq@ep-red-darkness-zag421fk-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require";
+  "";
 
 let pool: pg.Pool | null = null;
 let db: any;
