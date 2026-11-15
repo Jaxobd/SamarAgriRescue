@@ -22,7 +22,7 @@ import {
   type User,
 } from "@workspace/db";
 
-const sessionSecret = process.env.SESSION_SECRET ?? "samar-agrirescue-development-secret";
+const sessionSecret = process.env.SESSION_SECRET ?? randomBytes(32).toString("hex");
 
 export type SessionUser = User;
 
