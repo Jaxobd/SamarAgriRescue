@@ -638,7 +638,14 @@ function ForgotPasswordDialog({ onClose }: { onClose: () => void }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to find account.");
-      setStatusMsg("Account verified. Please choose a new secure password.");
+      if (!data.canReset) {
+        setError(
+          data.message ||
+            "For security, only an administrator can reset a password. Please contact the site administrator.",
+        );
+        return;
+      }
+      setStatusMsg(data.message || "Choose a new secure password for this account.");
       setStep(2);
     } catch (err: any) {
       setError(err.message || "Could not verify that account.");
@@ -683,7 +690,7 @@ function ForgotPasswordDialog({ onClose }: { onClose: () => void }) {
       {step === 1 ? (
         <form onSubmit={handleStep1}>
           <p className="dialog-copy">
-            Enter your username or email address to locate your account and set a new password.
+            Enter your username or email address. For security, a new password can only be set by an administrator, or by the account owner who is already signed in.
           </p>
           <Field label="Username or Email" required>
             <input

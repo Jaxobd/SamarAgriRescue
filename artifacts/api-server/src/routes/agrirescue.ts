@@ -375,6 +375,14 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     .from(usersTable)
     .where(or(eq(usersTable.username, identifier.trim()), eq(usersTable.email, identifier.trim().toLowerCase())));
 
+  // Do not reveal whether the account exists, and only allow the next step
+  // when the caller may actually change that password: an administrator, or
+  // the signed-in owner of the account.
+  const caller = await currentUser(req.headers.cookie);
+  const canReset = Boolean(
+    caller && user && (caller.userType === "Administrator" || caller.id === user.id),
+  );
+
   if (user) {
     await logActivity({
       userId: user.id,
@@ -388,8 +396,10 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
   res.json({
     success: true,
-    message: "If an account matches that email or username, password reset instructions have been generated.",
-    username: user ? user.username : null,
+    canReset,
+    message: canReset
+      ? "Choose a new secure password for this account."
+      : "For security, only an administrator can reset a password. Please contact the site administrator.",
   });
 });
 
@@ -404,6 +414,16 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
     return;
   }
 
+  // Require a session: this endpoint has no email/token delivery, so an
+  // anonymous caller could otherwise set a new password for any account.
+  const caller = await currentUser(req.headers.cookie);
+  if (!caller) {
+    res.status(403).json({
+      error: "Password resets require an administrator. Please ask the site administrator to reset this password.",
+    });
+    return;
+  }
+
   const [user] = await db
     .select()
     .from(usersTable)
@@ -411,6 +431,11 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 
   if (!user || !user.isActive) {
     res.status(404).json({ error: "No active account found for that username or email." });
+    return;
+  }
+
+  if (caller.userType !== "Administrator" && caller.id !== user.id) {
+    res.status(403).json({ error: "Only an administrator can reset another member's password." });
     return;
   }
 
