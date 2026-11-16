@@ -236,6 +236,16 @@ function isPublicHttpsUrl(value: string) {
   }
 }
 
+// Public base URL of the SPA for redirects after OAuth. A localhost/LAN value
+// (a common leftover from development) would send browsers to an unreachable
+// address, so only a public HTTPS origin is honoured; otherwise redirects stay
+// relative and resolve against the host that served the request.
+function frontendBase(req: Request) {
+  const configured = process.env.FRONTEND_URL?.trim();
+  if (configured && isPublicHttpsUrl(configured)) return configured.replace(/\/+$/, "");
+  return "";
+}
+
 function googleRedirectUri(req: Request) {
   const configured = process.env.GOOGLE_REDIRECT_URI?.trim();
   if (configured && isPublicHttpsUrl(configured)) return configured;
@@ -280,13 +290,13 @@ router.get("/auth/google", (req, res): void => {
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   try {
     const { code, state, error } = req.query;
-    const frontendBase = process.env.FRONTEND_URL || "";
+    const base = frontendBase(req);
     if (error) {
-      res.redirect(`${frontendBase}/login?error=${encodeURIComponent(String(error))}`);
+      res.redirect(`${base}/login?error=${encodeURIComponent(String(error))}`);
       return;
     }
     if (!code || typeof code !== "string") {
-      res.redirect(`${frontendBase}/login?error=Missing+Google+authorization+code`);
+      res.redirect(`${base}/login?error=Missing+Google+authorization+code`);
       return;
     }
 
@@ -320,12 +330,10 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       entityType: "user",
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || "";
     res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
-    res.redirect(user.userType === "Administrator" ? `${frontendUrl}/admin` : `${frontendUrl}/dashboard`);
+    res.redirect(user.userType === "Administrator" ? `${base}/admin` : `${base}/dashboard`);
   } catch (err: any) {
-    const frontendUrl = process.env.FRONTEND_URL || "";
-    res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(err.message || "Google authentication failed")}`);
+    res.redirect(`${frontendBase(req)}/login?error=${encodeURIComponent(err.message || "Google authentication failed")}`);
   }
 });
 
