@@ -9,6 +9,9 @@ import { uploadsDir } from "./routes/upload";
 
 const app: Express = express();
 
+// Behind Cloudflare/other proxies the public scheme is HTTPS; trust the forwarded headers
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
@@ -42,7 +45,9 @@ app.use(
       "http://www.samaragrirescue.com",
       /^http:\/\/localhost(:\d+)?$/,
       /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+      /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
       /\.loca\.lt$/,
+      /\.trycloudflare\.com$/,
       /\.vercel\.app$/,
     ],
     credentials: true,
@@ -64,9 +69,8 @@ app.use(
   }),
 );
 
-// Mount API routes (supports both /api and root mounts)
+// Mount API routes under /api (client always calls /api/*; root mount would shadow SPA routes)
 app.use("/api", router);
-app.use(router);
 
 // Serve frontend static client assets when built (SPA fallback for Express 5)
 const candidatePaths = [

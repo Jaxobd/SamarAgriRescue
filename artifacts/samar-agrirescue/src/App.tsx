@@ -104,6 +104,7 @@ import {
 import { Link, Route, Switch, useLocation } from "wouter";
 import "./index.css";
 import "./theme-and-admin.css";
+import "./notifications.css";
 
 const queryClient = new QueryClient();
 
@@ -150,6 +151,171 @@ function useTheme() {
   };
 
   return { theme, toggleTheme };
+}
+
+// ---------------------------------------------------------------------------
+// Activity notifications
+// ---------------------------------------------------------------------------
+type AppNotification = {
+  id: number;
+  type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  productId?: number | null;
+  entityId?: number | null;
+  entityType?: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+async function fetchNotifications(): Promise<AppNotification[]> {
+  const res = await fetch("/api/notifications?limit=50");
+  if (!res.ok) return [];
+  const json = await res.json();
+  return Array.isArray(json) ? json : [];
+}
+
+function useNotifications(enabled = true) {
+  return useQuery({
+    queryKey: ["notifications"],
+    queryFn: fetchNotifications,
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+function useUnreadNotifications(enabled = true) {
+  return useQuery({
+    queryKey: ["notifications-unread"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications/unread-count");
+      if (!res.ok) return { count: 0 };
+      return (await res.json()) as { count: number };
+    },
+    enabled,
+    refetchInterval: 30_000,
+  });
+}
+
+function useNotificationActions() {
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["notifications-unread"] });
+  };
+  const markRead = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+    },
+    onSuccess: refresh,
+  });
+  const markAllRead = useMutation({
+    mutationFn: async () => {
+      await fetch("/api/notifications/read-all", { method: "POST" });
+    },
+    onSuccess: refresh,
+  });
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    },
+    onSuccess: refresh,
+  });
+  return { markRead, markAllRead, remove };
+}
+
+function NotificationIcon({ type }: { type: string }) {
+  if (type === "reservation") return <HeartHandshake size={16} />;
+  if (type === "message") return <MessageCircle size={16} />;
+  if (type === "product") return <Package size={16} />;
+  if (type === "report") return <ShieldAlert size={16} />;
+  if (type === "admin") return <ShieldCheck size={16} />;
+  return <Bell size={16} />;
+}
+
+function NotificationBell() {
+  const [, navigate] = useLocation();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const { data: unread } = useUnreadNotifications();
+  const { data: notifications } = useNotifications();
+  const { markRead, markAllRead } = useNotificationActions();
+  const count = unread?.count ?? 0;
+  const list = (notifications ?? []).slice(0, 6);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const openNotification = (notification: AppNotification) => {
+    if (!notification.isRead) markRead.mutate(notification.id);
+    setOpen(false);
+    navigate(notification.link || "/activity");
+  };
+
+  return (
+    <div className="notif-wrap" ref={wrapRef}>
+      <button
+        className="theme-toggle-btn notif-btn"
+        onClick={() => setOpen((current) => !current)}
+        aria-label={count ? `${count} unread notifications` : "Notifications"}
+        aria-expanded={open}
+        title="Notifications"
+      >
+        <Bell size={17} />
+        {count > 0 && <span className="notif-badge">{count > 9 ? "9+" : count}</span>}
+      </button>
+      {open && (
+        <div className="notif-panel" role="dialog" aria-label="Notifications">
+          <div className="notif-panel-head">
+            <strong>Notifications {count > 0 && <span className="notif-count-pill">{count} new</span>}</strong>
+            {count > 0 && (
+              <button onClick={() => markAllRead.mutate()} disabled={markAllRead.isPending}>
+                Mark all read
+              </button>
+            )}
+          </div>
+          {list.length ? (
+            <div className="notif-panel-list">
+              {list.map((notification) => (
+                <button
+                  key={notification.id}
+                  className={`notif-item ${notification.isRead ? "" : "unread"}`}
+                  onClick={() => openNotification(notification)}
+                >
+                  <span className={`notif-icon notif-icon-${notification.type}`}>
+                    <NotificationIcon type={notification.type} />
+                  </span>
+                  <span className="notif-copy">
+                    <strong>{notification.title}</strong>
+                    {notification.body && <small>{notification.body}</small>}
+                    <em>{relativeDate(notification.createdAt)}</em>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="notif-empty">You're all caught up. New reservations, messages, and updates will appear here.</p>
+          )}
+          <Link href="/activity" className="notif-panel-foot" onClick={() => setOpen(false)}>
+            View all activity <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -276,131 +442,138 @@ function ImageUploader({
   value,
   onChange,
 }: {
-  value?: string | null;
-  onChange: (url: string) => void;
+  value?: string[];
+  onChange: (urls: string[]) => void;
 }) {
+  const images = value ?? [];
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(value || null);
   const [manualMode, setManualMode] = useState(false);
+  const [manualUrl, setManualUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setPreview(value || null);
-  }, [value]);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setError(null);
-    // Validate file type
+  const uploadFile = async (file: File) => {
     const validTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
     if (!validTypes.includes(file.type.toLowerCase())) {
-      setError("Supported formats: JPG, JPEG, PNG, and WEBP.");
-      return;
+      throw new Error("Supported formats: JPG, JPEG, PNG, and WEBP.");
     }
-
-    // Validate size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      setError("File size exceeds 5MB limit.");
+      throw new Error("Each photo must be 5MB or smaller.");
+    }
+    const formData = new FormData();
+    formData.append("image", file);
+    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || "Failed to upload image.");
+    }
+    const data = await res.json();
+    return String(data.url);
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(null);
+    const free = 6 - images.length;
+    if (free <= 0) {
+      setError("You can attach up to 6 photos per listing.");
       return;
     }
-
-    // Show instant local preview
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-
-    // Upload to backend
+    const chosen = Array.from(files).slice(0, free);
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("image", file);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "Failed to upload image.");
-      }
-
-      const data = await res.json();
-      onChange(data.url);
-      setPreview(data.url);
+      const uploaded: string[] = [];
+      for (const file of chosen) uploaded.push(await uploadFile(file));
+      onChange([...images, ...uploaded]);
     } catch (err: any) {
       setError(err.message || "Failed to upload image.");
-      setPreview(value || null);
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const handleRemove = async () => {
-    if (preview && preview.startsWith("/api/uploads/")) {
-      const filename = preview.replace("/api/uploads/", "");
-      fetch(`/api/upload/${filename}`, { method: "DELETE" }).catch(() => {});
+  const removeAt = (index: number) => {
+    const url = images[index];
+    if (url.startsWith("/api/uploads/")) {
+      fetch(`/api/upload/${url.replace("/api/uploads/", "")}`, { method: "DELETE" }).catch(() => {});
     }
-    setPreview(null);
-    onChange("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    onChange(images.filter((_, current) => current !== index));
+  };
+
+  const move = (index: number, direction: -1 | 1) => {
+    const next = [...images];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+
+  const makeCover = (index: number) => {
+    onChange([images[index], ...images.filter((_, current) => current !== index)]);
+  };
+
+  const addManualUrl = () => {
+    const url = manualUrl.trim();
+    if (!url) return;
+    if (images.length >= 6) {
+      setError("You can attach up to 6 photos per listing.");
+      return;
+    }
+    onChange([...images, url]);
+    setManualUrl("");
   };
 
   return (
     <div className="image-upload-wrapper">
-      {preview ? (
-        <div className="image-preview-card">
-          <img src={preview} alt="Product preview" />
-          <div className="image-preview-overlay">
-            <span className="image-preview-badge">
-              {uploading ? "Uploading…" : "Image attached"}
-            </span>
-            <div className="image-preview-actions">
-              <button
-                type="button"
-                className="button button-small button-outline"
-                style={{ background: "rgba(0,0,0,0.6)", color: "white", borderColor: "rgba(255,255,255,0.3)" }}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-              >
-                <RefreshCw size={13} /> Change
-              </button>
-              <button
-                type="button"
-                className="button button-small button-danger"
-                onClick={handleRemove}
-                disabled={uploading}
-              >
-                <Trash2 size={13} /> Remove
+      <div className="photo-grid">
+        {images.map((url, index) => (
+          <div className={`photo-tile ${index === 0 ? "is-cover" : ""}`} key={`${url}-${index}`}>
+            <img src={url} alt={`Product photo ${index + 1}`} />
+            {index === 0 && <span className="photo-cover-badge">Cover</span>}
+            <div className="photo-tile-actions">
+              {index > 0 && (
+                <button type="button" title="Move earlier" onClick={() => move(index, -1)}>
+                  <ChevronLeft size={13} />
+                </button>
+              )}
+              {index < images.length - 1 && (
+                <button type="button" title="Move later" onClick={() => move(index, 1)}>
+                  <ChevronRight size={13} />
+                </button>
+              )}
+              {index > 0 && (
+                <button type="button" title="Make cover photo" onClick={() => makeCover(index)}>
+                  <ImageIcon size={13} />
+                </button>
+              )}
+              <button type="button" title="Remove photo" className="danger" onClick={() => removeAt(index)}>
+                <Trash2 size={13} />
               </button>
             </div>
           </div>
-        </div>
-      ) : (
-        <div
-          className="image-upload-dropzone"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <div className="image-upload-icon">
-            {uploading ? <RefreshCw className="animate-spin" size={20} /> : <Upload size={20} />}
-          </div>
-          <div>
-            <strong>Click to upload product image</strong>
-            <p style={{ margin: "2px 0 0", fontSize: "11px", color: "var(--ink-soft)" }}>
-              JPG, PNG, or WEBP up to 5MB
-            </p>
-          </div>
-        </div>
-      )}
+        ))}
+        {images.length < 6 && (
+          <button
+            type="button"
+            className="photo-add"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <RefreshCw className="animate-spin" size={18} /> : <Plus size={18} />}
+            <span>{uploading ? "Uploading…" : "Add photo"}</span>
+            <small>{images.length}/6</small>
+          </button>
+        )}
+      </div>
 
       <input
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp,image/jpg"
+        multiple
         style={{ display: "none" }}
-        onChange={handleFileChange}
+        onChange={(event) => handleFiles(event.target.files)}
       />
 
       {error && <p className="form-error" style={{ margin: 0 }}>{error}</p>}
@@ -411,20 +584,31 @@ function ImageUploader({
           onClick={() => setManualMode(!manualMode)}
           style={{ background: "none", border: 0, padding: 0, fontSize: "11px", color: "var(--leaf)", cursor: "pointer", fontWeight: 600 }}
         >
-          {manualMode ? "Hide image URL input" : "Or enter direct image URL"}
+          {manualMode ? "Hide image URL input" : "Or add a direct image URL"}
         </button>
+        <span style={{ fontSize: "11px", color: "var(--ink-soft)" }}>
+          {images.length ? "First photo is the cover buyers see first." : "JPG, PNG, or WEBP up to 5MB each"}
+        </span>
       </div>
 
       {manualMode && (
-        <input
-          value={value ?? ""}
-          onChange={(e) => {
-            onChange(e.target.value);
-            setPreview(e.target.value);
-          }}
-          placeholder="https://example.com/fresh-produce.jpg"
-          style={{ fontSize: "12px" }}
-        />
+        <div className="manual-url-row">
+          <input
+            value={manualUrl}
+            onChange={(event) => setManualUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addManualUrl();
+              }
+            }}
+            placeholder="https://example.com/fresh-produce.jpg"
+            style={{ fontSize: "12px" }}
+          />
+          <button type="button" className="button button-small button-outline" onClick={addManualUrl}>
+            Add
+          </button>
+        </div>
       )}
     </div>
   );
@@ -606,6 +790,7 @@ function Shell() {
           <Route path="/my-products" component={() => <MyProductsPage user={user} />} />
           <Route path="/reservations" component={() => <ReservationsPage user={user} />} />
           <Route path="/messages" component={() => <MessagesPage user={user} />} />
+          <Route path="/activity" component={() => <ActivityPage user={user} />} />
           <Route path="/profile" component={() => <ProfilePage user={user} />} />
           <Route path="/profile/:id" component={({ params }) => <PublicProfilePage id={Number(params.id)} />} />
           <Route path="/admin" component={() => <AdminPage section="summary" user={user} />} />
@@ -679,6 +864,8 @@ function Header({ user }: { user?: User | null }) {
         </Link>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {user && <NotificationBell />}
+
           {/* Dark / Light Mode Toggle Button (Requirement 3) */}
           <button
             className="theme-toggle-btn"
@@ -708,6 +895,9 @@ function Header({ user }: { user?: User | null }) {
               <Link href="/dashboard" onClick={() => setOpen(false)}>Dashboard</Link>
               <Link href="/messages" onClick={() => setOpen(false)} className="nav-icon-link">
                 <MessageCircle size={16} /> Messages
+              </Link>
+              <Link href="/activity" onClick={() => setOpen(false)} className="nav-icon-link">
+                <Bell size={16} /> Activity
               </Link>
               {user.userType === "Administrator" && (
                 <Link href="/admin" onClick={() => setOpen(false)} style={{ color: "var(--leaf)", fontWeight: 700 }}>
@@ -984,15 +1174,18 @@ function RescuePage() {
 // Product Card Component with Image Support (Requirement 4)
 // ---------------------------------------------------------------------------
 function ProductCard({ product, rescue = false }: { product: Product; rescue?: boolean }) {
-  const hasImage = Boolean(product.image && product.image.trim());
+  const cover = product.images?.[0] ?? product.image;
+  const hasImage = Boolean(cover && cover.trim());
+  const photoCount = product.images?.length ?? (hasImage ? 1 : 0);
 
   return (
     <Link href={`/products/${product.id}`} className={`product-card ${rescue ? "product-card-rescue" : ""}`}>
       <div className={`product-image image-${product.category.toLowerCase().replace(/\W/g, "-")}`}>
         {hasImage ? (
           <img
-            src={product.image!}
+            src={cover!}
             alt={product.name}
+            loading="lazy"
             onError={(e) => {
               // Graceful fallback to illustration if image fails to load
               (e.currentTarget as HTMLElement).style.display = "none";
@@ -1000,6 +1193,11 @@ function ProductCard({ product, rescue = false }: { product: Product; rescue?: b
           />
         ) : (
           <ProductIllustration category={product.category} />
+        )}
+        {photoCount > 1 && (
+          <span className="photo-count-badge">
+            <ImageIcon size={11} /> {photoCount}
+          </span>
         )}
         {product.isRescue && (
           <span className="rescue-badge">
@@ -1055,6 +1253,11 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
   const [quantity, setQuantity] = useState(1);
   const [messageOpen, setMessageOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [activePhoto, setActivePhoto] = useState(0);
+
+  useEffect(() => {
+    setActivePhoto(0);
+  }, [product?.id]);
 
   const reserve = useCreateReservation({
     mutation: {
@@ -1076,7 +1279,8 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
   if (!product) return <NotFoundPage />;
 
   const isOwner = user?.id === product.producerId;
-  const hasImage = Boolean(product.image && product.image.trim());
+  const gallery = (product.images?.length ? product.images : product.image ? [product.image] : []).filter(Boolean);
+  const activeImage = gallery[activePhoto] ?? gallery[0];
 
   return (
     <div className="detail-page">
@@ -1086,10 +1290,10 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
       <div className="detail-layout">
         <div className="detail-visual">
           <div className="detail-image">
-            {hasImage ? (
+            {activeImage ? (
               <img
-                src={product.image!}
-                alt={product.name}
+                src={activeImage}
+                alt={`${product.name} photo ${activePhoto + 1}`}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
@@ -1100,7 +1304,43 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
                 <CircleAlert size={13} /> Rescue listing
               </span>
             )}
+            {gallery.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="gallery-nav gallery-nav-prev"
+                  aria-label="Previous photo"
+                  onClick={() => setActivePhoto((activePhoto - 1 + gallery.length) % gallery.length)}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="gallery-nav gallery-nav-next"
+                  aria-label="Next photo"
+                  onClick={() => setActivePhoto((activePhoto + 1) % gallery.length)}
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <span className="gallery-counter">{activePhoto + 1} / {gallery.length}</span>
+              </>
+            )}
           </div>
+          {gallery.length > 1 && (
+            <div className="gallery-thumbs">
+              {gallery.map((url, index) => (
+                <button
+                  type="button"
+                  key={`${url}-${index}`}
+                  className={`gallery-thumb ${index === activePhoto ? "active" : ""}`}
+                  onClick={() => setActivePhoto(index)}
+                  aria-label={`Show photo ${index + 1}`}
+                >
+                  <img src={url} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
           <div className="image-caption">
             <span><Clock3 size={14} /> Posted {relativeDate(product.createdAt)}</span>
             <span>Samar AgriRescue Network</span>
@@ -1328,6 +1568,46 @@ function DashboardPage({ user }: { user?: User | null }) {
           <Link href="/about" className="text-link">Learn about our mission <ArrowRight size={15} /></Link>
         </div>
       </div>
+
+      <DashboardActivityPanel />
+    </div>
+  );
+}
+
+function DashboardActivityPanel() {
+  const [, navigate] = useLocation();
+  const { data } = useNotifications();
+  const { markRead } = useNotificationActions();
+  const list = (data ?? []).slice(0, 4);
+  if (!list.length) return null;
+  return (
+    <div className="panel dashboard-activity">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Notifications</span>
+          <h2>Recent activity</h2>
+        </div>
+        <Link href="/activity" className="text-link">View all <ArrowRight size={15} /></Link>
+      </div>
+      {list.map((notification) => (
+        <button
+          key={notification.id}
+          className={`mini-row feed-mini ${notification.isRead ? "" : "unread"}`}
+          onClick={() => {
+            if (!notification.isRead) markRead.mutate(notification.id);
+            navigate(notification.link || "/activity");
+          }}
+        >
+          <span className={`notif-icon notif-icon-${notification.type}`}>
+            <NotificationIcon type={notification.type} />
+          </span>
+          <span>
+            <strong>{notification.title}</strong>
+            <small>{notification.body ?? relativeDate(notification.createdAt)}</small>
+          </span>
+          <ArrowRight size={15} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -1345,12 +1625,13 @@ function MetricCard({ icon, label, value, tone }: { icon: ReactNode; label: stri
 }
 
 function MiniProduct({ product }: { product: Product }) {
-  const hasImage = Boolean(product.image && product.image.trim());
+  const cover = product.images?.[0] ?? product.image;
+  const hasImage = Boolean(cover && cover.trim());
   return (
     <Link href={`/products/${product.id}`} className="mini-row">
       <span className="mini-product-icon">
         {hasImage ? (
-          <img src={product.image!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+          <img src={cover!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
         ) : (
           <ProductIllustration category={product.category} />
         )}
@@ -1428,13 +1709,14 @@ function ManageProduct({ product }: { product: Product }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProductsQueryKey() }),
   });
 
-  const hasImage = Boolean(product.image && product.image.trim());
+  const cover = product.images?.[0] ?? product.image;
+  const hasImage = Boolean(cover && cover.trim());
 
   return (
     <div className="manage-product">
       <span className="manage-image">
         {hasImage ? (
-          <img src={product.image!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+          <img src={cover!} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
         ) : (
           <ProductIllustration category={product.category} />
         )}
@@ -1579,6 +1861,96 @@ function MessagesPage({ user }: { user?: User | null }) {
 }
 
 // ---------------------------------------------------------------------------
+// Activity page (notifications feed)
+// ---------------------------------------------------------------------------
+function ActivityPage({ user }: { user?: User | null }) {
+  const [, navigate] = useLocation();
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const { data: rawNotifications, isLoading, isFetching, refetch } = useNotifications(!!user);
+  const { markRead, markAllRead, remove } = useNotificationActions();
+  const notifications = Array.isArray(rawNotifications) ? rawNotifications : [];
+  const unreadCount = notifications.filter((item) => !item.isRead).length;
+  const visible = filter === "unread" ? notifications.filter((item) => !item.isRead) : notifications;
+
+  if (!user) return <AuthRequired title="Sign in to see your activity" copy="Reservations, messages, and listing updates are collected here." />;
+
+  const openItem = (notification: AppNotification) => {
+    if (!notification.isRead) markRead.mutate(notification.id);
+    navigate(notification.link || "/dashboard");
+  };
+
+  return (
+    <div className="content-page">
+      <PageIntro
+        eyebrow="Your activity"
+        title="Notifications"
+        copy="Reservations, messages, listing changes, and admin updates in one place."
+        action={
+          <button
+            className="button button-outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </button>
+        }
+      />
+
+      <div className="activity-filter-bar activity-toolbar">
+        <button className={`activity-filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+          All <span>{notifications.length}</span>
+        </button>
+        <button className={`activity-filter-btn ${filter === "unread" ? "active" : ""}`} onClick={() => setFilter("unread")}>
+          Unread <span>{unreadCount}</span>
+        </button>
+        {unreadCount > 0 && (
+          <button className="button button-small button-outline activity-mark-all" onClick={() => markAllRead.mutate()} disabled={markAllRead.isPending}>
+            <CheckCircle2 size={14} /> Mark all read
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <LoadingState />
+      ) : visible.length ? (
+        <div className="activity-list">
+          {visible.map((notification) => (
+            <article key={notification.id} className={`activity-card ${notification.isRead ? "" : "unread"}`}>
+              <span className={`activity-icon-badge activity-badge-${notification.type}`}>
+                <NotificationIcon type={notification.type} />
+              </span>
+              <div className="activity-content">
+                <div className="activity-title-row">
+                  <strong>{notification.title}</strong>
+                  <small>{relativeDate(notification.createdAt)}</small>
+                </div>
+                {notification.body && <p className="activity-details">{notification.body}</p>}
+                <div className="feed-item-actions">
+                  <button onClick={() => openItem(notification)}>
+                    Open <ArrowRight size={13} />
+                  </button>
+                  {!notification.isRead && (
+                    <button onClick={() => markRead.mutate(notification.id)}>Mark read</button>
+                  )}
+                  <button className="danger" onClick={() => remove.mutate(notification.id)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title={filter === "unread" ? "No unread notifications" : "Nothing yet"}
+          copy="New reservations, messages, and listing updates will appear here."
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Product Form Page with Image Upload Support (Requirement 4)
 // ---------------------------------------------------------------------------
 function ProductFormPage({ user, productId }: { user?: User | null; productId?: number }) {
@@ -1598,11 +1970,17 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
     availabilityDate: new Date().toISOString().slice(0, 10),
     isRescue: false,
     image: "",
+    images: [],
   });
 
   useEffect(() => {
     if (!existing || initializedProductId.current === existing.id) return;
     initializedProductId.current = existing.id;
+    const gallery = existing.images?.length
+      ? existing.images
+      : existing.image
+        ? [existing.image]
+        : [];
     setForm({
       name: existing.name,
       category: existing.category,
@@ -1611,7 +1989,8 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
       quantity: existing.quantity,
       unit: existing.unit,
       location: existing.location,
-      image: existing.image ?? "",
+      image: gallery[0] ?? "",
+      images: gallery,
       availabilityDate: existing.availabilityDate ?? "",
       isRescue: existing.isRescue,
     });
@@ -1645,7 +2024,14 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (editing && !existing) return;
-    const data = { ...form, price: Number(form.price), quantity: Number(form.quantity) };
+    const gallery = (form.images ?? []).filter(Boolean);
+    const data = {
+      ...form,
+      image: gallery[0] ?? "",
+      images: gallery,
+      price: Number(form.price),
+      quantity: Number(form.quantity),
+    };
     if (editing) update.mutate({ id: productId!, data });
     else create.mutate({ data });
   };
@@ -1679,15 +2065,17 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
           </div>
         </div>
 
-        {/* Product Image Upload Section (Requirement 4) */}
+        {/* Product Photo Gallery (Requirement 4) */}
         <div className="form-section">
-          <h2>Product Photo</h2>
+          <h2>Product photos</h2>
           <p style={{ margin: "0 0 16px", fontSize: "12px", color: "var(--ink-soft)" }}>
-            Add an authentic photo of your produce. Listings with photos receive up to 3x more reservations.
+            Add up to six authentic photos of your produce. Listings with photos receive up to 3x more reservations.
           </p>
           <ImageUploader
-            value={form.image}
-            onChange={(url) => setField("image", url)}
+            value={form.images ?? []}
+            onChange={(urls) => {
+              setForm((current) => ({ ...current, images: urls, image: urls[0] ?? "" }));
+            }}
           />
         </div>
 
@@ -2405,7 +2793,9 @@ function AdminProductModal({
   const [quantity, setQuantity] = useState(product ? String(product.quantity) : "10");
   const [unit, setUnit] = useState(product?.unit || "kilogram");
   const [location, setLocation] = useState(product?.location || "Catbalogan City, Samar");
-  const [image, setImage] = useState(product?.image || "");
+  const [images, setImages] = useState<string[]>(
+    product?.images?.length ? product.images : product?.image ? [product.image] : [],
+  );
   const [status, setStatus] = useState(product?.status || "Available");
   const [isRescue, setIsRescue] = useState(product?.isRescue || false);
   const [loading, setLoading] = useState(false);
@@ -2424,7 +2814,8 @@ function AdminProductModal({
         quantity: Number(quantity),
         unit,
         location,
-        image,
+        image: images[0] ?? "",
+        images,
         status,
         isRescue,
       };
@@ -2463,8 +2854,8 @@ function AdminProductModal({
               {categories.slice(1).map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Product Photo">
-            <ImageUploader value={image} onChange={setImage} />
+          <Field label="Product Photos">
+            <ImageUploader value={images} onChange={setImages} />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="Price (₱)" required>
@@ -2565,6 +2956,12 @@ function AdminReportsPanel() {
 // ---------------------------------------------------------------------------
 // Direct Database Management / Database Viewer (Requirement 6)
 // ---------------------------------------------------------------------------
+function compactDbValue(val: string | null | undefined) {
+  if (val == null) return val;
+  if (val.length <= 400) return val;
+  return `${val.slice(0, 240)}… [truncated, ${(val.length / 1024).toFixed(1)} KB]`;
+}
+
 function AdminDatabaseViewer() {
   const [selectedTable, setSelectedTable] = useState("agri_users");
   const [search, setSearch] = useState("");
@@ -2713,7 +3110,7 @@ function AdminDatabaseViewer() {
                             <span className="db-id-val">#{val}</span>
                           ) : col === "passwordHash" ? (
                             <span className="db-redacted-val">[REDACTED]</span>
-                          ) : col.toLowerCase().includes("date") || col.toLowerCase().includes("at") ? (
+                          ) : /(At|Date)$/.test(col) ? (
                             <span className="db-date-val">{val ? new Date(val).toLocaleDateString() : "—"}</span>
                           ) : typeof val === "boolean" ? (
                             <span className={`status status-${val ? "available" : "sold"}`}>{val ? "TRUE" : "FALSE"}</span>
@@ -2721,8 +3118,10 @@ function AdminDatabaseViewer() {
                             <strong>₱{Number(val).toLocaleString()}</strong>
                           ) : val === null || val === undefined ? (
                             <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>null</span>
+                          ) : Array.isArray(val) ? (
+                            <span className="db-id-val">[{val.length} item{val.length === 1 ? "" : "s"}]</span>
                           ) : (
-                            String(val)
+                            compactDbValue(String(val))
                           )}
                         </td>
                       );
@@ -2785,9 +3184,11 @@ function AdminDatabaseViewer() {
                     ) : val === null || val === undefined ? (
                       <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>null</span>
                     ) : typeof val === "object" ? (
-                      JSON.stringify(val)
+                      JSON.stringify(val).length > 400
+                        ? `[${Array.isArray(val) ? val.length + " items" : "object"} · ${(JSON.stringify(val).length / 1024).toFixed(1)} KB]`
+                        : JSON.stringify(val)
                     ) : (
-                      String(val)
+                      compactDbValue(String(val))
                     )}
                   </span>
                 </div>
@@ -2797,7 +3198,14 @@ function AdminDatabaseViewer() {
             <div style={{ marginTop: 10 }}>
               <span className="eyebrow" style={{ marginBottom: 6 }}>Raw JSON Object</span>
               <pre className="record-json-block">
-                {JSON.stringify(inspectRecord, null, 2)}
+                {JSON.stringify(
+                  inspectRecord,
+                  (_key, value) =>
+                    typeof value === "string" && value.length > 400
+                      ? `${value.slice(0, 120)}… [truncated, ${(value.length / 1024).toFixed(1)} KB]`
+                      : value,
+                  2
+                )}
               </pre>
             </div>
           </div>

@@ -518,7 +518,7 @@ components:
         password: { type: string }
     Product:
       type: object
-      required: [id, producerId, producerName, name, category, price, quantity, unit, location, status, isRescue, createdAt]
+      required: [id, producerId, producerName, name, category, price, quantity, unit, location, status, isRescue, createdAt, images]
       properties:
         id: { type: integer }
         producerId: { type: integer }
@@ -532,6 +532,10 @@ components:
         unit: { type: string }
         location: { type: string }
         image: { type: ["string", "null"] }
+        images:
+          type: array
+          description: Ordered product photo gallery. The first entry is the cover photo.
+          items: { type: string }
         availabilityDate: { type: ["string", "null"] }
         status: { type: string, enum: [Available, Reserved, Sold] }
         isRescue: { type: boolean }
@@ -548,6 +552,11 @@ components:
         unit: { type: string }
         location: { type: string }
         image: { type: string }
+        images:
+          type: array
+          description: Ordered product photo gallery. The first entry becomes the cover photo.
+          maxItems: 6
+          items: { type: string }
         availabilityDate: { type: string }
         isRescue: { type: boolean }
     ProductUpdate:

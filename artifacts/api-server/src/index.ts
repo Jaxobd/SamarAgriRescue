@@ -17,6 +17,7 @@ for (const envFile of [
 const { default: app } = await import("./app");
 const { logger } = await import("./lib/logger");
 const { seedDemoData } = await import("./lib/agrirescue");
+const { ensureSchema } = await import("@workspace/db");
 
 const rawPort = process.env["PORT"] || "5000";
 const port = Number(rawPort);
@@ -25,6 +26,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+await ensureSchema();
 await seedDemoData();
 
 app.listen(port, (err) => {

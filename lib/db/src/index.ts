@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS agri_products (
   unit varchar(40) NOT NULL,
   location varchar(160) NOT NULL,
   image text,
+  images jsonb NOT NULL DEFAULT '[]'::jsonb,
   availability_date date,
   status varchar(30) NOT NULL DEFAULT 'Available',
   is_rescue boolean NOT NULL DEFAULT false,
@@ -83,23 +84,52 @@ CREATE TABLE IF NOT EXISTS agri_activities (
   entity_type varchar(50),
   created_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS agri_notifications (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL REFERENCES agri_users(id),
+  actor_id integer REFERENCES agri_users(id),
+  type varchar(50) NOT NULL,
+  title varchar(255) NOT NULL,
+  body text,
+  link text,
+  product_id integer REFERENCES agri_products(id),
+  entity_id integer,
+  entity_type varchar(50),
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+ALTER TABLE agri_products ADD COLUMN IF NOT EXISTS images jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE agri_users ADD COLUMN IF NOT EXISTS profile_image text;
+ALTER TABLE agri_users ADD COLUMN IF NOT EXISTS bio text;
+ALTER TABLE agri_users ADD COLUMN IF NOT EXISTS google_id varchar(128);
 `;
 
-const DEFAULT_DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgresql://neondb_owner:npg_B01aCmyzQUVq@ep-red-darkness-zag421fk-pooler.c-2.eu-west-2.aws.neon.tech/neondb?sslmode=require";
+const DATABASE_URL = (process.env.DATABASE_URL ?? "").trim();
 
 let pool: pg.Pool | null = null;
 let db: any;
+let schemaBootstrap: Promise<unknown> | null = null;
 
-if (process.env.DATABASE_URL) {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export async function ensureSchema() {
+  if (!schemaBootstrap) return;
+  try {
+    await schemaBootstrap;
+  } catch (err) {
+    console.error("Schema bootstrap failed:", err);
+  }
+}
+
+if (DATABASE_URL) {
+  pool = new Pool({ connectionString: DATABASE_URL });
   db = drizzlePg(pool, { schema });
 } else if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-  pool = new Pool({ connectionString: DEFAULT_DATABASE_URL });
-  db = drizzlePg(pool, { schema });
+  throw new Error(
+    "DATABASE_URL is not set. Add it to .env locally, or to your hosting provider's environment variables in production.",
+  );
 } else {
-  // Try local embedded PGlite for local development, or fallback to remote Postgres
+  // Local development without DATABASE_URL: use embedded PGlite.
   try {
     const pglitePkgName = "@electric-sql/pglite";
     const drizzlePglitePkgName = "drizzle-orm/pglite";
@@ -110,12 +140,16 @@ if (process.env.DATABASE_URL) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
     const client = new PGlite(dbDir);
-    client.exec(DDL).catch(() => {});
+    schemaBootstrap = client.exec(DDL);
     db = drizzlePglite(client, { schema });
   } catch (err) {
-    pool = new Pool({ connectionString: DEFAULT_DATABASE_URL });
-    db = drizzlePg(pool, { schema });
+    console.error("Local PGlite database failed to start:", err);
+    throw new Error("No database available. Fix the local PGlite error above, or set DATABASE_URL in .env.");
   }
+}
+
+if (pool) {
+  schemaBootstrap = pool.query(DDL);
 }
 
 export { pool, db };

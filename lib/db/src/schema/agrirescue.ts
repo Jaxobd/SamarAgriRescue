@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   numeric,
   pgTable,
   serial,
@@ -9,6 +10,7 @@ import {
   timestamp,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -39,6 +41,7 @@ export const productsTable = pgTable("agri_products", {
   unit: varchar("unit", { length: 40 }).notNull(),
   location: varchar("location", { length: 160 }).notNull(),
   image: text("image"),
+  images: jsonb("images").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   availabilityDate: date("availability_date", { mode: "string" }),
   status: varchar("status", { length: 30 }).notNull().default("Available"),
   isRescue: boolean("is_rescue").notNull().default(false),
@@ -87,6 +90,21 @@ export const activitiesTable = pgTable("agri_activities", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const notificationsTable = pgTable("agri_notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id),
+  actorId: integer("actor_id").references(() => usersTable.id),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  link: text("link"),
+  productId: integer("product_id").references(() => productsTable.id),
+  entityId: integer("entity_id"),
+  entityType: varchar("entity_type", { length: 50 }),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(usersTable).omit({
   id: true,
   createdAt: true,
@@ -113,6 +131,10 @@ export const insertActivitySchema = createInsertSchema(activitiesTable).omit({
   id: true,
   createdAt: true,
 });
+export const insertNotificationSchema = createInsertSchema(notificationsTable).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type User = typeof usersTable.$inferSelect;
 export type Product = typeof productsTable.$inferSelect;
@@ -120,9 +142,11 @@ export type Reservation = typeof reservationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type Report = typeof reportsTable.$inferSelect;
 export type Activity = typeof activitiesTable.$inferSelect;
+export type Notification = typeof notificationsTable.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type InsertReservation = z.infer<typeof insertReservationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertReport = z.infer<typeof insertReportSchema>;
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

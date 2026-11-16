@@ -13,16 +13,23 @@ import {
   activitiesTable,
   db,
   messagesTable,
+  notificationsTable,
   productsTable,
   reportsTable,
   reservationsTable,
   usersTable,
   type Activity,
+  type Notification,
   type Product,
   type User,
 } from "@workspace/db";
 
-const sessionSecret = process.env.SESSION_SECRET ?? "samar-agrirescue-development-secret";
+// Without an explicit secret, production gets a random per-process key (sessions
+// simply expire) instead of a value that is published in the repository.
+const sessionSecret = process.env.SESSION_SECRET
+  ?? (process.env.VERCEL || process.env.NODE_ENV === "production"
+    ? randomBytes(32).toString("hex")
+    : "samar-agrirescue-development-secret");
 
 export type SessionUser = User;
 
@@ -105,6 +112,56 @@ export async function logActivity(options: {
   } catch (err) {
     console.error("Activity logging error:", err);
   }
+}
+
+export type NotifyInput = {
+  userId: number;
+  actorId?: number | null;
+  type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  productId?: number | null;
+  entityId?: number | null;
+  entityType?: string | null;
+};
+
+export async function notify(options: NotifyInput) {
+  try {
+    await db.insert(notificationsTable).values({
+      userId: options.userId,
+      actorId: options.actorId ?? null,
+      type: options.type,
+      title: options.title,
+      body: options.body ?? null,
+      link: options.link ?? null,
+      productId: options.productId ?? null,
+      entityId: options.entityId ?? null,
+      entityType: options.entityType ?? null,
+    });
+  } catch (err) {
+    console.error("Notification error:", err);
+  }
+}
+
+export async function notifyMany(userIds: number[], options: Omit<NotifyInput, "userId">) {
+  const unique = [...new Set(userIds)].filter(Boolean);
+  await Promise.all(unique.map((userId) => notify({ ...options, userId })));
+}
+
+export function toNotification(notification: Notification) {
+  return {
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    link: notification.link,
+    productId: notification.productId,
+    entityId: notification.entityId,
+    entityType: notification.entityType,
+    isRead: notification.isRead,
+    createdAt: iso(notification.createdAt),
+  };
 }
 
 export function getGoogleOAuthConfig() {
@@ -228,6 +285,8 @@ export async function findOrCreateGoogleUser(profile: {
 }
 
 export function toProduct(product: Product, producer?: User) {
+  const gallery = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const cover = product.image || gallery[0] || null;
   return {
     id: product.id,
     producerId: product.producerId,
@@ -240,7 +299,8 @@ export function toProduct(product: Product, producer?: User) {
     quantity: numberValue(product.quantity),
     unit: product.unit,
     location: product.location,
-    image: product.image,
+    image: cover,
+    images: gallery.length ? gallery : cover ? [cover] : [],
     availabilityDate: product.availabilityDate,
     status: product.status,
     isRescue: product.isRescue,
@@ -282,9 +342,31 @@ export async function listProducts(options: {
     .filter((product: any) => !search || `${product.name} ${product.description ?? ""} ${product.producerName} ${product.location}`.toLowerCase().includes(search));
 }
 
+export const demoPhotoByName: Record<string, string> = {
+  "Fresh Tomatoes": "/produce/tomatoes.jpg",
+  "Saba Bananas": "/produce/saba-bananas.jpg",
+  "Premium Samar Rice": "/produce/rice.jpg",
+  "Fresh Tuna": "/produce/tuna.jpg",
+  "Morning Squid": "/produce/squid.jpg",
+  "Fresh Tilapia": "/produce/tilapia.jpg",
+};
+
+async function backfillDemoPhotos() {
+  for (const [name, photo] of Object.entries(demoPhotoByName)) {
+    await db
+      .update(productsTable)
+      .set({ image: photo, images: [photo] })
+      .where(and(eq(productsTable.name, name), sql`(image IS NULL OR image = '')`))
+      .catch((err: unknown) => console.error("Photo backfill error:", err));
+  }
+}
+
 export async function seedDemoData() {
   const existing = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
-  if (existing.length) return;
+  if (existing.length) {
+    await backfillDemoPhotos();
+    return;
+  }
 
   const [farmer, fisher, buyer, admin] = await db
     .insert(usersTable)
@@ -336,6 +418,8 @@ export async function seedDemoData() {
     {
       producerId: farmer.id,
       name: "Fresh Tomatoes",
+      image: "/produce/tomatoes.jpg",
+      images: ["/produce/tomatoes.jpg"],
       category: "Vegetables",
       description: "Bright, ripe tomatoes picked this morning from a family farm.",
       price: "85",
@@ -348,6 +432,8 @@ export async function seedDemoData() {
     {
       producerId: farmer.id,
       name: "Saba Bananas",
+      image: "/produce/saba-bananas.jpg",
+      images: ["/produce/saba-bananas.jpg"],
       category: "Fruits",
       description: "Naturally ripening saba bananas, ideal for snacks and cooking.",
       price: "60",
@@ -360,6 +446,8 @@ export async function seedDemoData() {
     {
       producerId: farmer.id,
       name: "Premium Samar Rice",
+      image: "/produce/rice.jpg",
+      images: ["/produce/rice.jpg"],
       category: "Rice & Grains",
       description: "Clean, locally grown rice from the latest harvest.",
       price: "1450",
@@ -372,6 +460,8 @@ export async function seedDemoData() {
     {
       producerId: fisher.id,
       name: "Fresh Tuna",
+      image: "/produce/tuna.jpg",
+      images: ["/produce/tuna.jpg"],
       category: "Fish",
       description: "Fresh catch landed in Guiuan, handled and chilled for pickup.",
       price: "280",
@@ -384,6 +474,8 @@ export async function seedDemoData() {
     {
       producerId: fisher.id,
       name: "Morning Squid",
+      image: "/produce/squid.jpg",
+      images: ["/produce/squid.jpg"],
       category: "Seafood",
       description: "Tender morning catch, perfect for grilling or adobo.",
       price: "240",
@@ -396,6 +488,8 @@ export async function seedDemoData() {
     {
       producerId: fisher.id,
       name: "Fresh Tilapia",
+      image: "/produce/tilapia.jpg",
+      images: ["/produce/tilapia.jpg"],
       category: "Fish",
       description: "Fresh whole tilapia from a local pond partner.",
       price: "190",
@@ -413,6 +507,23 @@ export async function seedDemoData() {
     action: "Platform initialized",
     details: "Marketplace seeded with demo producers, buyers, and surplus food listings.",
   });
+
+  await notify({
+    userId: buyer.id,
+    type: "system",
+    title: "Welcome to Samar AgriRescue",
+    body: "Browse rescue listings near you and reserve fresh produce before it goes to waste.",
+    link: "/products",
+  });
+  for (const producer of [farmer, fisher]) {
+    await notify({
+      userId: producer.id,
+      type: "system",
+      title: "Your listings are live",
+      body: "Buyers across Samar can now find your produce. Keep quantities up to date.",
+      link: "/my-products",
+    });
+  }
 }
 
 export async function producerFor(id: number) {

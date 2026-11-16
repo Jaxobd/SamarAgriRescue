@@ -18,6 +18,11 @@ export interface ProductInput {
   unit: string;
   location: string;
   image?: string;
+  /**
+     * Ordered product photo gallery. The first entry becomes the cover photo.
+     * @maxItems 6
+     */
+  images?: string[];
   availabilityDate?: string;
   isRescue?: boolean;
 }

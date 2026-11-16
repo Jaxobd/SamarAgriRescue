@@ -22,6 +22,8 @@ export interface Product {
   location: string;
   /** @nullable */
   image?: string | null;
+  /** Ordered product photo gallery. The first entry is the cover photo. */
+  images: string[];
   /** @nullable */
   availabilityDate?: string | null;
   status: ProductStatus;

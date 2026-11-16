@@ -1,4 +1,5 @@
 import app from "./app";
+import { ensureSchema } from "@workspace/db";
 import { seedDemoData } from "./lib/agrirescue";
 
 let seeded = false;
@@ -7,6 +8,7 @@ let seeded = false;
 app.use(async (_req, _res, next) => {
   if (!seeded) {
     try {
+      await ensureSchema();
       await seedDemoData();
     } catch (e) {
       console.warn("[serverless] Seed check skipped:", e);

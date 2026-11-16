@@ -5,6 +5,7 @@ import {
   activitiesTable,
   db,
   messagesTable,
+  notificationsTable,
   productsTable,
   reportsTable,
   reservationsTable,
@@ -53,9 +54,12 @@ import {
   hashPassword,
   listProducts,
   logActivity,
+  notify,
+  notifyMany,
   productWithProducer,
   producerFor,
   sessionCookie,
+  toNotification,
   toProduct,
   toUser,
   userIdFromCookie,
@@ -90,6 +94,13 @@ async function requireAdmin(req: Request, res: Response) {
 function validId(value: string | string[]) {
   const id = asId(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function normalizeGallery(images?: string[] | null, cover?: string | null) {
+  const gallery = (images ?? []).map((url) => url.trim()).filter(Boolean).slice(0, 6);
+  const legacyCover = cover?.trim();
+  if (legacyCover && !gallery.includes(legacyCover)) gallery.unshift(legacyCover);
+  return { images: gallery, image: gallery[0] ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +165,17 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     entityType: "user",
   });
 
+  await notify({
+    userId: user.id,
+    type: "system",
+    title: "Welcome to Samar AgriRescue",
+    body:
+      user.userType === "Buyer"
+        ? "Browse rescue listings near you and reserve fresh produce before it goes to waste."
+        : "Post your surplus and keep track of reservations, messages, and updates in one place.",
+    link: user.userType === "Buyer" ? "/products" : "/dashboard",
+  });
+
   res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
   res.status(201).json(RegisterResponse.parse({ user: toUser(user) }));
 });
@@ -200,6 +222,26 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
 });
 
 // Google Authentication
+
+// Google only accepts public HTTPS redirect URIs (localhost is the sole HTTP exception),
+// so a configured private/LAN address falls back to the host serving this request.
+function isPublicHttpsUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname;
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":");
+    return url.protocol === "https:" && host.includes(".") && !isIp;
+  } catch {
+    return false;
+  }
+}
+
+function googleRedirectUri(req: Request) {
+  const configured = process.env.GOOGLE_REDIRECT_URI?.trim();
+  if (configured && isPublicHttpsUrl(configured)) return configured;
+  return `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+}
+
 router.get("/auth/google/config", (_req, res): void => {
   res.json(getGoogleOAuthConfig());
 });
@@ -218,10 +260,7 @@ router.get("/auth/google", (req, res): void => {
     JSON.stringify({ nonce: randomBytes(16).toString("hex"), role })
   ).toString("base64url");
 
-  const host = req.get("host");
-  const protocol = req.protocol;
-  const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI || `${protocol}://${host}/api/auth/google/callback`;
+  const redirectUri = googleRedirectUri(req);
 
   const authUrl =
     `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -241,12 +280,13 @@ router.get("/auth/google", (req, res): void => {
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   try {
     const { code, state, error } = req.query;
+    const frontendBase = process.env.FRONTEND_URL || "";
     if (error) {
-      res.redirect(`/login?error=${encodeURIComponent(String(error))}`);
+      res.redirect(`${frontendBase}/login?error=${encodeURIComponent(String(error))}`);
       return;
     }
     if (!code || typeof code !== "string") {
-      res.redirect("/login?error=Missing+Google+authorization+code");
+      res.redirect(`${frontendBase}/login?error=Missing+Google+authorization+code`);
       return;
     }
 
@@ -260,10 +300,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       }
     }
 
-    const host = req.get("host");
-    const protocol = req.protocol;
-    const redirectUri =
-      process.env.GOOGLE_REDIRECT_URI || `${protocol}://${host}/api/auth/google/callback`;
+    const redirectUri = googleRedirectUri(req);
 
     const profile = await exchangeGoogleCode(code, redirectUri);
     const user = await findOrCreateGoogleUser({
@@ -283,10 +320,12 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       entityType: "user",
     });
 
+    const frontendUrl = process.env.FRONTEND_URL || "";
     res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
-    res.redirect(user.userType === "Administrator" ? "/admin" : "/dashboard");
+    res.redirect(user.userType === "Administrator" ? `${frontendUrl}/admin` : `${frontendUrl}/dashboard`);
   } catch (err: any) {
-    res.redirect(`/login?error=${encodeURIComponent(err.message || "Google authentication failed")}`);
+    const frontendUrl = process.env.FRONTEND_URL || "";
+    res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(err.message || "Google authentication failed")}`);
   }
 });
 
@@ -421,6 +460,7 @@ router.post("/products", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const gallery = normalizeGallery(parsed.data.images, parsed.data.image);
   const [product] = await db.insert(productsTable).values({
     producerId: user.id,
     name: parsed.data.name,
@@ -430,7 +470,8 @@ router.post("/products", async (req, res): Promise<void> => {
     quantity: String(parsed.data.quantity),
     unit: parsed.data.unit,
     location: parsed.data.location,
-    image: parsed.data.image,
+    image: gallery.image,
+    images: gallery.images,
     availabilityDate: parsed.data.availabilityDate,
     isRescue: parsed.data.isRescue ?? false,
   }).returning();
@@ -479,10 +520,16 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
     res.status(403).json({ error: "You can only edit your own listings." });
     return;
   }
+  const gallery =
+    parsed.data.images == null
+      ? { image: parsed.data.image ?? existing.image, images: (existing.images as string[] | null) ?? [] }
+      : normalizeGallery(parsed.data.images, parsed.data.image);
   const [product] = await db.update(productsTable).set({
     ...parsed.data,
     price: parsed.data.price == null ? existing.price : String(parsed.data.price),
     quantity: parsed.data.quantity == null ? existing.quantity : String(parsed.data.quantity),
+    image: gallery.image,
+    images: gallery.images,
     updatedAt: new Date(),
   }).where(eq(productsTable.id, id)).returning();
 
@@ -556,6 +603,37 @@ router.post("/products/:id/sold", async (req, res): Promise<void> => {
     entityId: product.id,
     entityType: "product",
   });
+
+  const waiting = await db
+    .select({ buyerId: reservationsTable.buyerId })
+    .from(reservationsTable)
+    .where(and(eq(reservationsTable.productId, id), or(eq(reservationsTable.status, "Pending"), eq(reservationsTable.status, "Confirmed"))));
+  await notifyMany(
+    waiting.map((row: { buyerId: number }) => row.buyerId),
+    {
+      actorId: user.id,
+      type: "product",
+      title: `${product.name} is now sold`,
+      body: "A listing you reserved has been marked sold. Coordinate pickup with the producer.",
+      link: `/products/${product.id}`,
+      productId: product.id,
+      entityId: product.id,
+      entityType: "product",
+    },
+  );
+  if (user.id !== product.producerId) {
+    await notify({
+      userId: product.producerId,
+      actorId: user.id,
+      type: "product",
+      title: "Listing marked sold by admin",
+      body: `"${product.name}" is now marked as sold.`,
+      link: `/products/${product.id}`,
+      productId: product.id,
+      entityId: product.id,
+      entityType: "product",
+    });
+  }
 
   res.json(GetProductResponse.parse(await productWithProducer(product)));
 });
@@ -636,6 +714,18 @@ router.post("/reservations", async (req, res): Promise<void> => {
     type: "reservation",
     action: "Product reserved",
     details: `${reservation.quantity} ${product.unit} of ${product.name} reserved by ${user.fullName}`,
+    entityId: reservation.id,
+    entityType: "reservation",
+  });
+
+  await notify({
+    userId: product.producerId,
+    actorId: user.id,
+    type: "reservation",
+    title: "New reservation",
+    body: `${user.fullName} reserved ${reservation.quantity} ${product.unit} of ${product.name}.`,
+    link: "/reservations",
+    productId: product.id,
     entityId: reservation.id,
     entityType: "reservation",
   });
@@ -722,6 +812,21 @@ router.patch("/reservations/:id", async (req, res): Promise<void> => {
     entityType: "reservation",
   });
 
+  const counterpartId = user.id === buyer.id ? product.producerId : buyer.id;
+  if (counterpartId !== user.id) {
+    await notify({
+      userId: counterpartId,
+      actorId: user.id,
+      type: "reservation",
+      title: `Reservation ${reservation.status.toLowerCase()}`,
+      body: `${user.fullName} marked reservation #${reservation.id} for ${product.name} as ${reservation.status}.`,
+      link: "/reservations",
+      productId: product.id,
+      entityId: reservation.id,
+      entityType: "reservation",
+    });
+  }
+
   res.json({
     id: reservation.id,
     productId: product.id,
@@ -784,6 +889,23 @@ router.post("/messages", async (req, res): Promise<void> => {
     message: parsed.data.message,
   }).returning();
   const [receiver] = await db.select().from(usersTable).where(eq(usersTable.id, message.receiverId));
+
+  if (message.receiverId !== user.id) {
+    const [aboutProduct] = message.productId
+      ? await db.select({ name: productsTable.name }).from(productsTable).where(eq(productsTable.id, message.productId))
+      : [];
+    await notify({
+      userId: message.receiverId,
+      actorId: user.id,
+      type: "message",
+      title: `New message from ${user.fullName}`,
+      body: message.message.length > 160 ? `${message.message.slice(0, 157)}…` : message.message,
+      link: aboutProduct ? `/products/${message.productId}` : "/messages",
+      productId: message.productId,
+      entityId: message.id,
+      entityType: "message",
+    });
+  }
   res.status(201).json({
     id: message.id,
     senderId: user.id,
@@ -812,6 +934,84 @@ router.post("/messages/:id/read", async (req, res): Promise<void> => {
     return;
   }
   res.json({ id: message.id, senderId: message.senderId, senderName: "User", receiverId: message.receiverId, receiverName: user.fullName, productId: message.productId, productName: null, message: message.message, isRead: true, createdAt: message.createdAt.toISOString() });
+});
+
+// ---------------------------------------------------------------------------
+// Notifications (activity feed per user)
+// ---------------------------------------------------------------------------
+
+router.get("/notifications", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const requested = Number(req.query.limit);
+  const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 100) : 40;
+  const rows = await db
+    .select()
+    .from(notificationsTable)
+    .where(eq(notificationsTable.userId, user.id))
+    .orderBy(desc(notificationsTable.createdAt))
+    .limit(limit);
+  res.json(rows.map(toNotification));
+});
+
+router.get("/notifications/unread-count", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(notificationsTable)
+    .where(and(eq(notificationsTable.userId, user.id), eq(notificationsTable.isRead, false)));
+  res.json({ count: Number(row?.count ?? 0) });
+});
+
+router.post("/notifications/read-all", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const updated = await db
+    .update(notificationsTable)
+    .set({ isRead: true })
+    .where(and(eq(notificationsTable.userId, user.id), eq(notificationsTable.isRead, false)))
+    .returning({ id: notificationsTable.id });
+  res.json({ updated: updated.length });
+});
+
+router.post("/notifications/:id/read", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const id = validId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Invalid notification id." });
+    return;
+  }
+  const [notification] = await db
+    .update(notificationsTable)
+    .set({ isRead: true })
+    .where(and(eq(notificationsTable.id, id), eq(notificationsTable.userId, user.id)))
+    .returning();
+  if (!notification) {
+    res.status(404).json({ error: "Notification not found." });
+    return;
+  }
+  res.json(toNotification(notification));
+});
+
+router.delete("/notifications/:id", async (req, res): Promise<void> => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const id = validId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Invalid notification id." });
+    return;
+  }
+  const deleted = await db
+    .delete(notificationsTable)
+    .where(and(eq(notificationsTable.id, id), eq(notificationsTable.userId, user.id)))
+    .returning({ id: notificationsTable.id });
+  if (!deleted.length) {
+    res.status(404).json({ error: "Notification not found." });
+    return;
+  }
+  res.sendStatus(204);
 });
 
 // ---------------------------------------------------------------------------
@@ -882,6 +1082,32 @@ router.post("/reports", async (req, res): Promise<void> => {
     entityId: report.id,
     entityType: "report",
   });
+
+  await notify({
+    userId: product.producerId,
+    actorId: user.id,
+    type: "report",
+    title: "Your listing was reported",
+    body: `"${product.name}" was reported for ${report.reason}. An administrator will review it.`,
+    link: `/products/${product.id}`,
+    productId: product.id,
+    entityId: report.id,
+    entityType: "report",
+  });
+  const admins = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.userType, "Administrator"));
+  await notifyMany(
+    admins.map((row: { id: number }) => row.id),
+    {
+      actorId: user.id,
+      type: "report",
+      title: "New listing report",
+      body: `${user.fullName} reported "${product.name}" for ${report.reason}.`,
+      link: "/admin/reports",
+      productId: product.id,
+      entityId: report.id,
+      entityType: "report",
+    },
+  );
 
   res.status(201).json({ id: report.id, reporterId: user.id, reporterName: user.fullName, productId: product.id, productName: product.name, reason: report.reason, description: report.description, status: report.status, createdAt: report.createdAt.toISOString() });
 });
@@ -1106,6 +1332,22 @@ router.patch("/admin/users/:id", async (req, res): Promise<void> => {
     entityType: "user",
   });
 
+  if (user.id !== admin.id) {
+    const disabled = requestedActive === false;
+    await notify({
+      userId: user.id,
+      actorId: admin.id,
+      type: "admin",
+      title: disabled ? "Your account was disabled" : "Your account was updated",
+      body: disabled
+        ? "An administrator disabled your account. Contact the AgriRescue desk for help."
+        : `An administrator updated your account details${requestedRole ? ` (role: ${user.userType})` : ""}.`,
+      link: "/profile",
+      entityId: user.id,
+      entityType: "user",
+    });
+  }
+
   res.json(toUser(user));
 });
 
@@ -1160,12 +1402,13 @@ router.post("/admin/products", async (req, res): Promise<void> => {
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
-  const { name, category, description, price, quantity, unit, location, image, availabilityDate, isRescue, producerId } = req.body;
+  const { name, category, description, price, quantity, unit, location, image, images, availabilityDate, isRescue, producerId } = req.body;
   if (!name || !category || price == null || quantity == null || !unit || !location) {
     res.status(400).json({ error: "Product name, category, price, quantity, unit, and location are required." });
     return;
   }
 
+  const gallery = normalizeGallery(Array.isArray(images) ? images : undefined, image ? String(image) : null);
   const targetProducerId = producerId ? Number(producerId) : admin.id;
   const [product] = await db.insert(productsTable).values({
     producerId: targetProducerId,
@@ -1176,7 +1419,8 @@ router.post("/admin/products", async (req, res): Promise<void> => {
     quantity: String(quantity),
     unit: String(unit),
     location: String(location),
-    image: image ? String(image) : null,
+    image: gallery.image,
+    images: gallery.images,
     availabilityDate: availabilityDate ? String(availabilityDate) : new Date().toISOString().slice(0, 10),
     isRescue: Boolean(isRescue),
   }).returning();
@@ -1218,6 +1462,13 @@ router.patch("/admin/products/:id", async (req, res): Promise<void> => {
   if (req.body.unit !== undefined) updateData.unit = req.body.unit;
   if (req.body.location !== undefined) updateData.location = req.body.location;
   if (req.body.image !== undefined) updateData.image = req.body.image;
+  if (Array.isArray(req.body.images)) {
+    const gallery = normalizeGallery(req.body.images, req.body.image ?? existing.image);
+    updateData.image = gallery.image;
+    updateData.images = gallery.images;
+  } else if (req.body.image !== undefined) {
+    updateData.images = req.body.image ? [req.body.image] : [];
+  }
   if (req.body.availabilityDate !== undefined) updateData.availabilityDate = req.body.availabilityDate;
   if (req.body.status !== undefined) updateData.status = req.body.status;
   if (req.body.isRescue !== undefined) updateData.isRescue = Boolean(req.body.isRescue);
@@ -1253,6 +1504,16 @@ router.delete("/admin/products/:id", async (req, res): Promise<void> => {
       type: "admin",
       action: "Product deleted by admin",
       details: `Admin deleted product "${existing.name}" (ID #${id})`,
+      entityId: id,
+      entityType: "product",
+    });
+    await notify({
+      userId: existing.producerId,
+      actorId: admin.id,
+      type: "admin",
+      title: "Listing removed",
+      body: `An administrator removed your listing "${existing.name}".`,
+      link: "/my-products",
       entityId: id,
       entityType: "product",
     });
@@ -1309,6 +1570,18 @@ router.patch("/admin/reports/:id", async (req, res): Promise<void> => {
     type: "admin",
     action: "Report status updated",
     details: `Report #${report.id} updated to ${report.status}`,
+    entityId: report.id,
+    entityType: "report",
+  });
+
+  await notify({
+    userId: report.reporterId,
+    actorId: admin.id,
+    type: "report",
+    title: `Report ${report.status.toLowerCase()}`,
+    body: `Your report about "${product?.name ?? "a listing"}" is now ${report.status.toLowerCase()}.`,
+    link: product ? `/products/${product.id}` : "/products",
+    productId: report.productId,
     entityId: report.id,
     entityType: "report",
   });
@@ -1386,7 +1659,7 @@ const DB_TABLE_MAP: Record<
     name: "Products (agri_products)",
     table: productsTable,
     description: "Surplus agricultural produce and seafood inventory",
-    columns: ["id", "producerId", "name", "category", "description", "price", "quantity", "unit", "location", "image", "availabilityDate", "status", "isRescue", "createdAt", "updatedAt"],
+    columns: ["id", "producerId", "name", "category", "description", "price", "quantity", "unit", "location", "image", "images", "availabilityDate", "status", "isRescue", "createdAt", "updatedAt"],
     sanitizeRow: (row: any) => ({
       ...row,
       price: row.price != null ? Number(row.price) : 0,
@@ -1422,6 +1695,16 @@ const DB_TABLE_MAP: Record<
     table: reportsTable,
     description: "Marketplace listing reports and community moderation",
     columns: ["id", "reporterId", "productId", "reason", "description", "status", "createdAt"],
+    sanitizeRow: (row: any) => ({
+      ...row,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    }),
+  },
+  agri_notifications: {
+    name: "Notifications (agri_notifications)",
+    table: notificationsTable,
+    description: "In-app activity notifications for reservations, messages, and moderation",
+    columns: ["id", "userId", "actorId", "type", "title", "body", "link", "productId", "entityId", "entityType", "isRead", "createdAt"],
     sanitizeRow: (row: any) => ({
       ...row,
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,

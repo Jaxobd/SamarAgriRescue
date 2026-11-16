@@ -24,9 +24,7 @@ export const GetStatsResponse = zod.object({
   "availableProducts": zod.int(),
   "registeredProducers": zod.int(),
   "productsRescued": zod.int(),
-  "activeBuyers": zod.int(),
-  "totalUsers": zod.int().optional(),
-  "totalProducts": zod.int().optional(),
+  "activeBuyers": zod.int()
 })
 
 
@@ -35,18 +33,18 @@ export const GetStatsResponse = zod.object({
  */
 export const GetCurrentUserResponse = zod.object({
   "user": zod.union([zod.object({
-    "id": zod.int(),
-    "fullName": zod.string(),
-    "username": zod.string(),
-    "email": zod.string(),
-    "phone": zod.string().nullish(),
-    "location": zod.string().nullable(),
-    "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
-    "profileImage": zod.string().nullish(),
-    "bio": zod.string().nullish(),
-    "isActive": zod.boolean(),
-    "createdAt": zod.string()
-  }), zod.null()])
+  "id": zod.int(),
+  "fullName": zod.string(),
+  "username": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "location": zod.string().nullable(),
+  "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
+  "profileImage": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string()
+}),zod.null()])
 })
 
 
@@ -77,18 +75,18 @@ export const RegisterBody = zod.object({
 
 export const RegisterResponse = zod.object({
   "user": zod.union([zod.object({
-    "id": zod.int(),
-    "fullName": zod.string(),
-    "username": zod.string(),
-    "email": zod.string(),
-    "phone": zod.string().nullish(),
-    "location": zod.string().nullable(),
-    "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
-    "profileImage": zod.string().nullish(),
-    "bio": zod.string().nullish(),
-    "isActive": zod.boolean(),
-    "createdAt": zod.string()
-  }), zod.null()])
+  "id": zod.int(),
+  "fullName": zod.string(),
+  "username": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "location": zod.string().nullable(),
+  "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
+  "profileImage": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string()
+}),zod.null()])
 })
 
 
@@ -102,18 +100,18 @@ export const LoginBody = zod.object({
 
 export const LoginResponse = zod.object({
   "user": zod.union([zod.object({
-    "id": zod.int(),
-    "fullName": zod.string(),
-    "username": zod.string(),
-    "email": zod.string(),
-    "phone": zod.string().nullish(),
-    "location": zod.string().nullable(),
-    "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
-    "profileImage": zod.string().nullish(),
-    "bio": zod.string().nullish(),
-    "isActive": zod.boolean(),
-    "createdAt": zod.string()
-  }), zod.null()])
+  "id": zod.int(),
+  "fullName": zod.string(),
+  "username": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "location": zod.string().nullable(),
+  "userType": zod.enum(['Farmer', 'Fisherfolk', 'Buyer', 'Administrator']),
+  "profileImage": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string()
+}),zod.null()])
 })
 
 
@@ -152,6 +150,7 @@ export const GetProductsResponseItem = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
@@ -169,6 +168,8 @@ export const createProductBodyPriceMin = 0;
 
 export const createProductBodyQuantityExclusiveMin = 0;
 
+export const createProductBodyImagesMax = 6;
+
 
 
 export const CreateProductBody = zod.object({
@@ -180,6 +181,7 @@ export const CreateProductBody = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().optional(),
+  "images": zod.array(zod.string()).max(createProductBodyImagesMax).optional().describe('Ordered product photo gallery. The first entry becomes the cover photo.'),
   "availabilityDate": zod.string().optional(),
   "isRescue": zod.boolean().optional()
 })
@@ -197,6 +199,7 @@ export const CreateProductResponse = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
@@ -224,6 +227,7 @@ export const GetProductResponse = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
@@ -244,6 +248,8 @@ export const updateProductBodyOnePriceMin = 0;
 
 export const updateProductBodyOneQuantityExclusiveMin = 0;
 
+export const updateProductBodyOneImagesMax = 6;
+
 
 
 export const UpdateProductBody = zod.object({
@@ -255,6 +261,7 @@ export const UpdateProductBody = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().optional(),
+  "images": zod.array(zod.string()).max(updateProductBodyOneImagesMax).optional().describe('Ordered product photo gallery. The first entry becomes the cover photo.'),
   "availabilityDate": zod.string().optional(),
   "isRescue": zod.boolean().optional()
 })
@@ -272,6 +279,7 @@ export const UpdateProductResponse = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
@@ -309,6 +317,7 @@ export const MarkProductSoldResponse = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
@@ -474,23 +483,24 @@ export const GetProfileResponse = zod.object({
   "createdAt": zod.string()
 }).and(zod.object({
   "products": zod.array(zod.object({
-    "id": zod.int(),
-    "producerId": zod.int(),
-    "producerName": zod.string(),
-    "producerType": zod.string().optional(),
-    "name": zod.string(),
-    "category": zod.string(),
-    "description": zod.string().nullish(),
-    "price": zod.number(),
-    "quantity": zod.number(),
-    "unit": zod.string(),
-    "location": zod.string(),
-    "image": zod.string().nullish(),
-    "availabilityDate": zod.string().nullish(),
-    "status": zod.enum(['Available', 'Reserved', 'Sold']),
-    "isRescue": zod.boolean(),
-    "createdAt": zod.string()
-  }))
+  "id": zod.int(),
+  "producerId": zod.int(),
+  "producerName": zod.string(),
+  "producerType": zod.string().optional(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "description": zod.string().nullish(),
+  "price": zod.number(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "location": zod.string(),
+  "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
+  "availabilityDate": zod.string().nullish(),
+  "status": zod.enum(['Available', 'Reserved', 'Sold']),
+  "isRescue": zod.boolean(),
+  "createdAt": zod.string()
+}))
 }))
 
 
@@ -523,23 +533,24 @@ export const UpdateProfileResponse = zod.object({
   "createdAt": zod.string()
 }).and(zod.object({
   "products": zod.array(zod.object({
-    "id": zod.int(),
-    "producerId": zod.int(),
-    "producerName": zod.string(),
-    "producerType": zod.string().optional(),
-    "name": zod.string(),
-    "category": zod.string(),
-    "description": zod.string().nullish(),
-    "price": zod.number(),
-    "quantity": zod.number(),
-    "unit": zod.string(),
-    "location": zod.string(),
-    "image": zod.string().nullish(),
-    "availabilityDate": zod.string().nullish(),
-    "status": zod.enum(['Available', 'Reserved', 'Sold']),
-    "isRescue": zod.boolean(),
-    "createdAt": zod.string()
-  }))
+  "id": zod.int(),
+  "producerId": zod.int(),
+  "producerName": zod.string(),
+  "producerType": zod.string().optional(),
+  "name": zod.string(),
+  "category": zod.string(),
+  "description": zod.string().nullish(),
+  "price": zod.number(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "location": zod.string(),
+  "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
+  "availabilityDate": zod.string().nullish(),
+  "status": zod.enum(['Available', 'Reserved', 'Sold']),
+  "isRescue": zod.boolean(),
+  "createdAt": zod.string()
+}))
 }))
 
 
@@ -652,6 +663,7 @@ export const GetAdminProductsResponseItem = zod.object({
   "unit": zod.string(),
   "location": zod.string(),
   "image": zod.string().nullish(),
+  "images": zod.array(zod.string()).describe('Ordered product photo gallery. The first entry is the cover photo.'),
   "availabilityDate": zod.string().nullish(),
   "status": zod.enum(['Available', 'Reserved', 'Sold']),
   "isRescue": zod.boolean(),
