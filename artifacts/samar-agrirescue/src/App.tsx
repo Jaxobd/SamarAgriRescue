@@ -101,7 +101,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { Link, Route, Switch, useLocation } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import "./index.css";
 import "./theme-and-admin.css";
 import "./notifications.css";
@@ -111,6 +111,21 @@ const queryClient = new QueryClient();
 const categories = ["All categories", "Vegetables", "Fruits", "Rice & Grains", "Fish", "Seafood", "Livestock", "Other"];
 const locations = ["All Samar", "Calbayog City", "Catbalogan City", "Basey", "Guiuan", "Borongan City"];
 const units = ["kilogram", "sack", "basket", "piece", "bundle", "crate", "box"];
+
+const unitPlurals: Record<string, string> = {
+  kilogram: "kilograms",
+  sack: "sacks",
+  basket: "baskets",
+  piece: "pieces",
+  bundle: "bundles",
+  crate: "crates",
+  box: "boxes",
+};
+
+function unitLabel(unit: string | undefined, quantity: number) {
+  if (!unit) return "unit";
+  return quantity === 1 ? unit : unitPlurals[unit] ?? unit;
+}
 
 function errorMessage(error: unknown, fallback = "Something went wrong. Please try again.") {
   if (error && typeof error === "object" && "data" in error) {
@@ -779,6 +794,11 @@ function Shell() {
     );
   }
 
+  // Sign-in and sign-up pages make no sense for an authenticated visitor.
+  if (user && (location === "/login" || location === "/register")) {
+    return <Redirect to={user.userType === "Administrator" ? "/admin" : "/dashboard"} />;
+  }
+
   return (
     <div className="app-shell">
       <Header user={user} />
@@ -824,6 +844,9 @@ function Header({ user }: { user?: User | null }) {
   const logout = useLogout({
     mutation: {
       onSuccess: () => {
+        // Drop every cached query so a different account can never see the
+        // previous user's reservations, messages, or notifications.
+        queryClient.clear();
         queryClient.setQueryData(getGetCurrentUserQueryKey(), { user: null });
         navigate("/");
       },
@@ -969,6 +992,7 @@ function HomePage({ user }: { user?: User | null }) {
   const { data: stats } = useGetStats();
   const { data: rawProducts } = useGetProducts({ rescue: true, sort: "newest" });
   const products = Array.isArray(rawProducts) ? rawProducts : [];
+  const canSell = !user || user.userType !== "Buyer";
   return (
     <div className="home-page">
       <section className="hero">
@@ -978,7 +1002,9 @@ function HomePage({ user }: { user?: User | null }) {
           <p>We connect Samar farmers and fisherfolk with nearby buyers so surplus produce finds a market instead of going to waste.</p>
           <div className="hero-actions">
             <Link href="/products" className="button button-primary">Browse surplus <ArrowRight size={17} /></Link>
-            <Link href={user ? "/products/new" : "/register"} className="button button-quiet">Sell your surplus <Plus size={17} /></Link>
+            {canSell && (
+              <Link href={user ? "/products/new" : "/register"} className="button button-quiet">Sell your surplus <Plus size={17} /></Link>
+            )}
           </div>
           <div className="hero-trust">
             <div className="mini-avatars"><span>JD</span><span>LM</span><span>MS</span><b>+</b></div>
@@ -1027,14 +1053,29 @@ function HomePage({ user }: { user?: User | null }) {
       </section>
 
       <section className="cta-section">
-        <div>
-          <span className="eyebrow eyebrow-light">Have extra to share?</span>
-          <h2>Turn your surplus<br /><i>into someone’s next meal.</i></h2>
-          <p>Join the local network of producers making a difference in Samar.</p>
-        </div>
-        <Link href={user ? "/products/new" : "/register"} className="button button-light">
-          List your surplus <ArrowRight size={17} />
-        </Link>
+        {canSell ? (
+          <>
+            <div>
+              <span className="eyebrow eyebrow-light">Have extra to share?</span>
+              <h2>Turn your surplus<br /><i>into someone’s next meal.</i></h2>
+              <p>Join the local network of producers making a difference in Samar.</p>
+            </div>
+            <Link href={user ? "/products/new" : "/register"} className="button button-light">
+              List your surplus <ArrowRight size={17} />
+            </Link>
+          </>
+        ) : (
+          <>
+            <div>
+              <span className="eyebrow eyebrow-light">Good food needs a home</span>
+              <h2>Every rescue listing<br /><i>starts with a buyer.</i></h2>
+              <p>Browse surplus from Samar producers and reserve what your kitchen needs.</p>
+            </div>
+            <Link href="/rescue" className="button button-light">
+              Rescue something today <ArrowRight size={17} />
+            </Link>
+          </>
+        )}
       </section>
     </div>
   );
@@ -1121,7 +1162,7 @@ function ProductsPage() {
         </select>
       </div>
       <div className="results-row">
-        <span>{isLoading ? "Finding listings…" : `${products.length} listings available`}</span>
+        <span>{isLoading ? "Finding listings…" : `${products.length} ${products.length === 1 ? "listing" : "listings"} available`}</span>
         <label className="toggle-label">
           <input
             type="checkbox"
@@ -1229,7 +1270,7 @@ function ProductCard({ product, rescue = false }: { product: Product; rescue?: b
           <strong>
             ₱{product.price.toLocaleString()} <small>/ {product.unit}</small>
           </strong>
-          <span>{product.quantity} {product.unit} left</span>
+          <span>{product.quantity} {unitLabel(product.unit, product.quantity)} left</span>
         </div>
       </div>
     </Link>
@@ -1367,7 +1408,7 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
           <div className="detail-facts">
             <div>
               <span>Available</span>
-              <strong>{product.quantity} {product.unit}</strong>
+              <strong>{product.quantity} {unitLabel(product.unit, product.quantity)}</strong>
             </div>
             <div>
               <span>Location</span>
@@ -1395,9 +1436,9 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
               <Link href={`/products/${id}/edit`} className="button button-primary">
                 <Pencil size={16} /> Edit listing
               </Link>
-              <button className="button button-outline" onClick={() => setMessageOpen(true)}>
+              <Link href="/reservations" className="button button-outline">
                 View interest
-              </button>
+              </Link>
             </div>
           ) : user?.userType === "Buyer" ? (
             <div className="detail-actions">
@@ -1418,7 +1459,12 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
                   <>Reserve product <ArrowRight size={17} /></>
                 )}
               </button>
-              <button className="button button-outline icon-button" onClick={() => setMessageOpen(true)}>
+              <button
+                className="button button-outline icon-button"
+                onClick={() => setMessageOpen(true)}
+                aria-label={`Message ${product.producerName}`}
+                title="Message the producer"
+              >
                 <MessageCircle size={17} />
               </button>
             </div>
@@ -1433,8 +1479,12 @@ function ProductDetailPage({ id, user }: { id: number; user?: User | null }) {
           {reserve.isError && <p className="form-error">{errorMessage(reserve.error)}</p>}
 
           <div className="detail-links">
-            <button onClick={() => setReportOpen(true)}>Report this listing</button>
-            <span>·</span>
+            {user && !isOwner && (
+              <>
+                <button onClick={() => setReportOpen(true)}>Report this listing</button>
+                <span>·</span>
+              </>
+            )}
             <span>Payment and pickup arranged directly</span>
           </div>
         </div>
@@ -1489,6 +1539,7 @@ function ReportDialog({ product, onClose, mutation }: { product: Product; onClos
         placeholder="Additional details (optional)"
         rows={3}
       />
+      {mutation.isError && <p className="form-error">{errorMessage(mutation.error)}</p>}
       <button
         className="button button-primary"
         disabled={mutation.isPending}
@@ -1659,7 +1710,7 @@ function ReservationRow({ reservation }: { reservation: Reservation }) {
       <span className="mini-product-icon"><Package size={20} /></span>
       <span>
         <strong>{reservation.productName}</strong>
-        <small>{reservation.quantity} {reservation.unit} · {reservation.producerName}</small>
+        <small>{reservation.quantity} {unitLabel(reservation.unit, reservation.quantity)} · {reservation.producerName}</small>
       </span>
       <span className={`status status-${reservation.status.toLowerCase()}`}>{reservation.status}</span>
     </div>
@@ -1676,6 +1727,18 @@ function MyProductsPage({ user }: { user?: User | null }) {
   });
   const products = Array.isArray(rawProducts) ? rawProducts : [];
   const mine = products.filter((p) => p.producerId === user?.id);
+
+  if (!user) return <AuthRequired title="Your listings are private" copy="Log in with a farmer or fisherfolk account to manage your listings." />;
+  if (user.userType === "Buyer") {
+    return (
+      <div className="empty-page">
+        <div className="empty-icon"><ShoppingBasket /></div>
+        <h1>Buyer account</h1>
+        <p>Buyer accounts reserve produce. Listing tools belong to farmer and fisherfolk accounts — contact an administrator if you sell surplus and need a producer account.</p>
+        <Link href="/products" className="button button-primary">Browse products <ArrowRight size={16} /></Link>
+      </div>
+    );
+  }
 
   return (
     <div className="content-page">
@@ -1734,7 +1797,7 @@ function ManageProduct({ product }: { product: Product }) {
           <span className={`status status-${product.status.toLowerCase()}`}>{product.status}</span>
         </div>
         <h3>{product.name}</h3>
-        <p>{product.location} · {product.quantity} {product.unit} · ₱{product.price.toLocaleString()}/{product.unit}</p>
+        <p>{product.location} · {product.quantity} {unitLabel(product.unit, product.quantity)} · ₱{product.price.toLocaleString()}/{product.unit}</p>
       </div>
       <div className="manage-actions">
         <Link href={`/products/${product.id}/edit`} className="icon-action" aria-label="Edit">
@@ -1788,7 +1851,7 @@ function ReservationsPage({ user }: { user?: User | null }) {
                   <span className={`status status-${r.status.toLowerCase()}`}>{r.status}</span>
                 </div>
                 <h3>{r.productName}</h3>
-                <p>{r.quantity} {r.unit} · {relativeDate(r.createdAt)}</p>
+                <p>{r.quantity} {unitLabel(r.unit, r.quantity)} · {relativeDate(r.createdAt)}</p>
               </div>
               {user.userType !== "Buyer" && r.status === "Pending" && (
                 <div className="reservation-actions">
@@ -2025,6 +2088,16 @@ function ProductFormPage({ user, productId }: { user?: User | null; productId?: 
     setForm((current) => ({ ...current, [key]: value }));
 
   if (!user) return <AuthRequired title="Sign in to list your surplus" copy="Producer accounts can share fresh local products with nearby buyers." />;
+  if (user.userType === "Buyer") {
+    return (
+      <div className="empty-page">
+        <div className="empty-icon"><ShoppingBasket /></div>
+        <h1>Producer tools</h1>
+        <p>Buyer accounts cannot publish listings. If you also sell surplus, ask an administrator to switch your account to Farmer or Fisherfolk.</p>
+        <Link href="/products" className="button button-primary">Browse products <ArrowRight size={16} /></Link>
+      </div>
+    );
+  }
   if (editing && isLoading) return <LoadingState />;
   if (editing && !existing) return <NotFoundPage />;
 
@@ -2701,7 +2774,7 @@ function AdminProductsPanel() {
                 </span>
                 <div>
                   <strong>{p.name}</strong>
-                  <small>{p.producerName} · {p.location} · ₱{p.price}/{p.unit} · {p.quantity} {p.unit} left</small>
+                  <small>{p.producerName} · {p.location} · ₱{p.price}/{p.unit} · {p.quantity} {unitLabel(p.unit, p.quantity)} left</small>
                 </div>
                 {p.isRescue && (
                   <span className="rescue-badge" style={{ position: "static", padding: "4px 8px" }}>
@@ -3323,7 +3396,7 @@ function LoginPage() {
   });
 
   return (
-    <AuthLayout eyebrow="Welcome back" title="Good to see you again.">
+    <AuthLayout eyebrow="Welcome back" title="Good to see you again." variant="login">
       {/* Google Sign-In Button */}
       <GoogleAuthButton mode="login" />
 
@@ -3412,7 +3485,7 @@ function RegisterPage() {
   const passwordsMatch = password.length > 0 && password === passwordConfirm;
 
   return (
-    <AuthLayout eyebrow="Join the local network" title="Make good food move.">
+    <AuthLayout eyebrow="Join the local network" title="Make good food move." variant="register">
       {/* Google Sign-Up Button */}
       <GoogleAuthButton mode="register" role={userRole} />
 
@@ -3540,7 +3613,18 @@ function RegisterPage() {
   );
 }
 
-function AuthLayout({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
+function AuthLayout({
+  eyebrow,
+  title,
+  variant,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  variant: "login" | "register";
+  children: ReactNode;
+}) {
+  const isRegister = variant === "register";
   return (
     <div className="auth-page">
       <div className="auth-art">
@@ -3555,9 +3639,9 @@ function AuthLayout({ eyebrow, title, children }: { eyebrow: string; title: stri
         <p className="auth-subtitle">Samar AgriRescue is a simple way to connect with your local food community.</p>
         {children}
         <p className="auth-switch">
-          {title.includes("back") ? "New here?" : "Already have an account?"}{" "}
-          <Link href={title.includes("back") ? "/register" : "/login"}>
-            {title.includes("back") ? "Create an account" : "Log in"}
+          {isRegister ? "Already have an account?" : "New here?"}{" "}
+          <Link href={isRegister ? "/login" : "/register"}>
+            {isRegister ? "Log in" : "Create an account"}
           </Link>
         </p>
       </div>

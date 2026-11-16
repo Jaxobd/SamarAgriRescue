@@ -229,6 +229,12 @@ export async function exchangeGoogleCode(code: string, redirectUri: string) {
   return verifyGoogleIdToken(tokens.id_token);
 }
 
+// Google sign-up is self-service, so it must never be able to mint an
+// Administrator account from request input.
+function selfServeUserType(value: unknown) {
+  return value === "Farmer" || value === "Fisherfolk" ? value : "Buyer";
+}
+
 export async function findOrCreateGoogleUser(profile: {
   googleId: string;
   email: string;
@@ -280,7 +286,7 @@ export async function findOrCreateGoogleUser(profile: {
     username,
     email,
     passwordHash: hashPassword(unguessablePassword),
-    userType: profile.userType || "Buyer",
+    userType: selfServeUserType(profile.userType),
     profileImage: profile.profileImage,
     googleId: profile.googleId,
     location: "Samar, Philippines",

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   activitiesTable,
   db,
@@ -252,6 +252,25 @@ function googleRedirectUri(req: Request) {
   return `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
 }
 
+// Only these roles may be requested through the public sign-up flow. Without
+// this guard a crafted ?role=Administrator would mint an administrator on the
+// first Google sign-in.
+const SELF_SERVE_ROLES = ["Farmer", "Fisherfolk", "Buyer"] as const;
+type SelfServeRole = (typeof SELF_SERVE_ROLES)[number];
+
+function selfServeRole(value: unknown): SelfServeRole {
+  return SELF_SERVE_ROLES.includes(value as SelfServeRole) ? (value as SelfServeRole) : "Buyer";
+}
+
+function readCookie(header: string | undefined, name: string) {
+  const raw = header?.split(";").find((part) => part.trim().startsWith(`${name}=`));
+  return raw ? raw.trim().slice(name.length + 1) : null;
+}
+
+const oauthStateCookie = (nonce: string) =>
+  `samar_oauth_state=${nonce}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`;
+const clearOAuthStateCookie = "samar_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+
 router.get("/auth/google/config", (_req, res): void => {
   res.json(getGoogleOAuthConfig());
 });
@@ -265,10 +284,9 @@ router.get("/auth/google", (req, res): void => {
     return;
   }
 
-  const role = (req.query.role as string) || "Buyer";
-  const state = Buffer.from(
-    JSON.stringify({ nonce: randomBytes(16).toString("hex"), role })
-  ).toString("base64url");
+  const role = selfServeRole(req.query.role);
+  const nonce = randomBytes(16).toString("hex");
+  const state = Buffer.from(JSON.stringify({ nonce, role })).toString("base64url");
 
   const redirectUri = googleRedirectUri(req);
 
@@ -284,6 +302,7 @@ router.get("/auth/google", (req, res): void => {
       prompt: "select_account",
     }).toString();
 
+  res.setHeader("Set-Cookie", oauthStateCookie(nonce));
   res.redirect(authUrl);
 });
 
@@ -292,22 +311,40 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const { code, state, error } = req.query;
     const base = frontendBase(req);
     if (error) {
+      res.setHeader("Set-Cookie", clearOAuthStateCookie);
       res.redirect(`${base}/login?error=${encodeURIComponent(String(error))}`);
       return;
     }
     if (!code || typeof code !== "string") {
+      res.setHeader("Set-Cookie", clearOAuthStateCookie);
       res.redirect(`${base}/login?error=Missing+Google+authorization+code`);
       return;
     }
 
-    let role = "Buyer";
-    if (state && typeof state === "string") {
+    // The state must match the nonce stored in the browser when sign-in began.
+    // This blocks login-CSRF and stops a tampered state from choosing a role.
+    const expectedNonce = readCookie(req.headers.cookie, "samar_oauth_state");
+    let role: SelfServeRole = "Buyer";
+    let stateValid = false;
+    if (state && typeof state === "string" && expectedNonce) {
       try {
         const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
-        if (decoded.role) role = decoded.role;
+        if (
+          typeof decoded.nonce === "string" &&
+          decoded.nonce.length === expectedNonce.length &&
+          timingSafeEqual(Buffer.from(decoded.nonce), Buffer.from(expectedNonce))
+        ) {
+          stateValid = true;
+          role = selfServeRole(decoded.role);
+        }
       } catch {
-        // Fallback to Buyer
+        // Invalid state payload; handled below.
       }
+    }
+    if (!stateValid) {
+      res.setHeader("Set-Cookie", clearOAuthStateCookie);
+      res.redirect(`${base}/login?error=${encodeURIComponent("Your Google sign-in session expired. Please try again.")}`);
+      return;
     }
 
     const redirectUri = googleRedirectUri(req);
@@ -330,7 +367,10 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       entityType: "user",
     });
 
-    res.setHeader("Set-Cookie", `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`);
+    res.setHeader("Set-Cookie", [
+      `samar_session=${sessionCookie(user.id)}; ${cookieOptions}`,
+      clearOAuthStateCookie,
+    ]);
     res.redirect(user.userType === "Administrator" ? `${base}/admin` : `${base}/dashboard`);
   } catch (err: any) {
     res.redirect(`${frontendBase(req)}/login?error=${encodeURIComponent(err.message || "Google authentication failed")}`);
@@ -351,7 +391,7 @@ router.post("/auth/google/token", async (req, res): Promise<void> => {
       email: profile.email,
       fullName: profile.fullName,
       profileImage: profile.profileImage,
-      userType: userType || "Buyer",
+      userType: selfServeRole(userType),
     });
 
     await logActivity({
@@ -746,7 +786,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     userId: user.id,
     type: "reservation",
     action: "Product reserved",
-    details: `${reservation.quantity} ${product.unit} of ${product.name} reserved by ${user.fullName}`,
+    details: `${Number(reservation.quantity)} ${product.unit} of ${product.name} reserved by ${user.fullName}`,
     entityId: reservation.id,
     entityType: "reservation",
   });
@@ -756,7 +796,7 @@ router.post("/reservations", async (req, res): Promise<void> => {
     actorId: user.id,
     type: "reservation",
     title: "New reservation",
-    body: `${user.fullName} reserved ${reservation.quantity} ${product.unit} of ${product.name}.`,
+    body: `${user.fullName} reserved ${Number(reservation.quantity)} ${product.unit} of ${product.name}.`,
     link: "/reservations",
     productId: product.id,
     entityId: reservation.id,
@@ -1063,7 +1103,14 @@ router.get("/profiles/:id", async (req, res): Promise<void> => {
     return;
   }
   const products = await listProducts({ availableOnly: false });
-  res.json({ ...toUser(user), products: products.filter((product: any) => product.producerId === id) });
+  // Public profiles must not expose private contact details or provider ids.
+  res.json({
+    ...toUser(user),
+    email: "",
+    phone: null,
+    googleId: null,
+    products: products.filter((product: any) => product.producerId === id),
+  });
 });
 
 router.patch("/profile", async (req, res): Promise<void> => {

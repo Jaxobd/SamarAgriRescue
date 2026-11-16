@@ -26,6 +26,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Apply the saved theme before the first paint to avoid a light flash.
+      try {
+        var savedTheme = localStorage.getItem("samar_theme");
+        var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (savedTheme === "dark" || (savedTheme !== "light" && prefersDark)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
