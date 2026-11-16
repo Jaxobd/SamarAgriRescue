@@ -24,12 +24,19 @@ import {
   type User,
 } from "@workspace/db";
 
-// Without an explicit secret, production gets a random per-process key (sessions
-// simply expire) instead of a value that is published in the repository.
-const sessionSecret = process.env.SESSION_SECRET
-  ?? (process.env.VERCEL || process.env.NODE_ENV === "production"
-    ? randomBytes(32).toString("hex")
-    : "samar-agrirescue-development-secret");
+// Only local development may fall back to the well-known demo key. Any other
+// environment (including hosts that leave NODE_ENV unset, such as Render) gets
+// a random per-process key so published source can never forge a session.
+const configuredSessionSecret = process.env.SESSION_SECRET;
+const sessionSecret = configuredSessionSecret
+  ?? (process.env.NODE_ENV === "development"
+    ? "samar-agrirescue-development-secret"
+    : randomBytes(32).toString("hex"));
+if (!configuredSessionSecret) {
+  console.warn(
+    "[session] SESSION_SECRET is not set; using a random per-process key, so logins will not survive a restart.",
+  );
+}
 
 export type SessionUser = User;
 

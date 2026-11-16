@@ -33,11 +33,11 @@ To map your custom domain **SamarAgriRescue.com** (via Cloudflare, GoDaddy, Name
 
 The production application is configured with unified single-port serving (frontend SPA + backend Express API).
 
-- **Public Live Tunnel:** [https://males-icq-inherited-magnetic.trycloudflare.com](https://males-icq-inherited-magnetic.trycloudflare.com) (quick-tunnel URLs change after every restart/reboot)
+- **Live site (Render):** [https://samaragrirescue.onrender.com](https://samaragrirescue.onrender.com)
 - **Local Production URL:** `http://localhost:5000`
 - **Database:** Neon PostgreSQL Cloud Database (`ep-red-darkness-zag421fk-pooler.c-2.eu-west-2.aws.neon.tech`)
 
-To bring the public site back up after a restart:
+To bring a local public site back up after a restart:
 
 ```bash
 # 1. Start the unified production server (serves SPA + API from one port)
@@ -46,6 +46,20 @@ NODE_ENV=production node artifacts/api-server/dist/index.mjs
 # 2. In a second terminal, expose it publicly (URL changes on each run)
 cloudflared tunnel --url http://127.0.0.1:5000
 ```
+
+---
+
+## 🟣 Deploying on Render
+
+Create a **Web Service** from this repository and use:
+
+- **Build command:** `pnpm install --frozen-lockfile && pnpm run build`
+- **Start command:** `pnpm --filter @workspace/api-server run start`
+- **Environment variables:** `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+
+`SESSION_SECRET` must be set: without it the server generates a random per-process key, so logins would not survive a restart. The server locates the built frontend relative to its own bundle, so the start command works whether the process runs from the repository root or from `artifacts/api-server` (the log line `Serving frontend build` confirms it found the SPA).
+
+Uploaded product photos are written to `uploads/` on local disk. On Render that directory is ephemeral — attach a persistent disk to the service and mount it at `uploads/` if uploaded photos must survive redeploys.
 
 ---
 
